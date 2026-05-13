@@ -1,4 +1,3 @@
-
 export interface Job {
   id: string;
   title: string;
@@ -36,9 +35,9 @@ export interface Job {
 
 export interface UserPreferences {
   displayName: string;
-  backgroundSummary: string;   // education, skills, background
-  astrologyProfile: string;    // 命理 + 流年
-  jobPreferences: string;      // salary, direction, avoidance (freeform)
+  backgroundSummary: string; // education, skills, background
+  astrologyProfile: string; // 命理 + 流年
+  jobPreferences: string; // salary, direction, avoidance (freeform)
   preferredLocations: string[];
   avoidKeywords: string[];
 }
