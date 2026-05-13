@@ -29,7 +29,6 @@ import {
   Target,
   FileWarning,
   Key,
-  RefreshCcw,
 } from 'lucide-react';
 import { Job, Profile } from './types';
 import {
@@ -37,6 +36,10 @@ import {
   deepAuditJob,
   sendMessageToJobConsultant,
 } from './services/geminiService';
+import { legacyProfileView, syncResumeFromLegacy } from './src/core/legacyAdapter';
+import type { UserContext } from './src/core/types';
+import { LEGACY_PROFILE_KEY, USER_CONTEXT_KEY } from './src/storage/keys';
+import { runUserContextMigration } from './src/storage/migrations';
 
 const DEFAULT_PROFILE: Profile = {
   name: '阿棠',
@@ -48,12 +51,14 @@ const DEFAULT_PROFILE: Profile = {
 };
 
 const LOCAL_STORAGE_KEY_JOBS = 'career_navigator_jobs_v10';
-const LOCAL_STORAGE_KEY_PROFILE = 'career_navigator_profile';
 const LOCAL_STORAGE_KEY_USAGE = 'career_navigator_usage_v4';
 
 const App = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [userContext, setUserContext] = useState<UserContext>(
+    () => runUserContextMigration().context,
+  );
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
@@ -82,7 +87,7 @@ const App = () => {
 
     const savedJobs = localStorage.getItem(LOCAL_STORAGE_KEY_JOBS);
     if (savedJobs) setJobs(JSON.parse(savedJobs));
-    const savedProfile = localStorage.getItem(LOCAL_STORAGE_KEY_PROFILE);
+    const savedProfile = localStorage.getItem(LEGACY_PROFILE_KEY);
     if (savedProfile) setProfile(JSON.parse(savedProfile));
     const savedUsage = localStorage.getItem(LOCAL_STORAGE_KEY_USAGE);
     if (savedUsage) setUsage(JSON.parse(savedUsage));
@@ -111,9 +116,19 @@ const App = () => {
 
   const saveProfileData = (newProfile: Profile) => {
     setProfile(newProfile);
-    localStorage.setItem(LOCAL_STORAGE_KEY_PROFILE, JSON.stringify(newProfile));
+    localStorage.setItem(LEGACY_PROFILE_KEY, JSON.stringify(newProfile));
+    setUserContext((prev) => {
+      const next = syncResumeFromLegacy(prev, newProfile);
+      localStorage.setItem(USER_CONTEXT_KEY, JSON.stringify(next));
+      return next;
+    });
     setShowProfileModal(false);
   };
+
+  const effectiveProfile = useMemo(
+    () => legacyProfileView(userContext, profile),
+    [userContext, profile],
+  );
 
   const handleError = (e: any, type: string) => {
     console.error(e);
@@ -155,7 +170,7 @@ const App = () => {
 
     setIsScreening(true);
     try {
-      const results = await batchScreenJobs(unscreened, profile);
+      const results = await batchScreenJobs(unscreened, effectiveProfile);
       trackUsage('flash');
 
       setJobs((prev) => {
@@ -183,7 +198,7 @@ const App = () => {
   const handleDeepAudit = async (job: Job) => {
     setIsAuditing(true);
     try {
-      const analysis = await deepAuditJob(job, profile);
+      const analysis = await deepAuditJob(job, effectiveProfile);
       trackUsage('pro');
       const updates = {
         analysis,
@@ -271,7 +286,7 @@ const App = () => {
     setChatInput('');
     setIsChatting(true);
     try {
-      const response = await sendMessageToJobConsultant(selectedJob, profile, chatInput);
+      const response = await sendMessageToJobConsultant(selectedJob, effectiveProfile, chatInput);
       trackUsage('flash');
       const aiMsg = {
         role: 'model' as const,
