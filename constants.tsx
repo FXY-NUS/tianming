@@ -1,9 +1,16 @@
+import { assemblePersonaPrompt } from './src/personas/promptAssembly';
 import { UserContext } from './types';
+
+function personaBlock(ctx: UserContext): string {
+  const rendered = assemblePersonaPrompt(ctx);
+  return rendered ? `\n【画像插件输出】\n${rendered}\n` : '';
+}
 
 export const FLASH_FILTER_PROMPT = (ctx: UserContext) => `
 你是一个极速筛选刽子手。
 【命主画像】：0经验应届生, NUS DSML硕士。背景: ${ctx.preferences.backgroundSummary}
 【择业偏好】：${ctx.preferences.jobPreferences}
+${personaBlock(ctx)}
 【核心规则】：
 1. 经验过滤：看到 "2+ years", "Senior", "Manager" 且没说 "Fresh/Junior" 的，打分 < 15。
 2. 背景过滤：避开纯底层硬件、纯传统会计。
@@ -19,7 +26,7 @@ export const PRO_AUDIT_PROMPT = (ctx: UserContext) => `
 - 现实背景: ${ctx.preferences.backgroundSummary}
 - 命理底色: ${ctx.preferences.astrologyProfile}
 - 择业偏好: ${ctx.preferences.jobPreferences}
-
+${personaBlock(ctx)}
 【审计维度】：
 A. 行业与职能 (30分): IT/AI/Web3/管理岗(+30); 纯行政/搬砖(0)。
 B. 薪酬与潜力 (25分): 起薪高(+25); 画饼期权(触碰廉贞忌, -15)。
@@ -46,4 +53,4 @@ E. 命理加权 (10分): 坐标正东/东南/正南(深港); 审美文化属性�
 
 export const CHAT_SYSTEM_PROMPT = (jobTitle: string, company: string, ctx: UserContext) => `
 你现在是 [${jobTitle}] 的 AI 职业顾问。基于命主背景(${ctx.preferences.backgroundSummary})回答，保持简练犀利。
-`;
+${personaBlock(ctx)}`;

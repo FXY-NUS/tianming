@@ -31,7 +31,9 @@ import {
   Key,
   RefreshCcw,
 } from 'lucide-react';
-import { Job, UserContext } from './types';
+import { Job, PersonaInstance, UserContext } from './types';
+import './src/personas';
+import { PersonasSection } from './src/personas/PersonasSection';
 import {
   batchScreenJobs,
   deepAuditJob,
@@ -304,8 +306,12 @@ const App = () => {
 
   // Local edit state for profile modal
   const [editPrefs, setEditPrefs] = useState(userCtx.preferences);
+  const [editPersonas, setEditPersonas] = useState<PersonaInstance[]>(userCtx.personas);
+  const [editActiveIds, setEditActiveIds] = useState<string[]>(userCtx.activePersonaIds);
   const openProfileModal = () => {
     setEditPrefs(userCtx.preferences);
+    setEditPersonas(userCtx.personas);
+    setEditActiveIds(userCtx.activePersonaIds);
     setShowProfileModal(true);
   };
 
@@ -812,10 +818,30 @@ const App = () => {
                   className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
+              <div className="space-y-4">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                  画像插件
+                </label>
+                <PersonasSection
+                  personas={editPersonas}
+                  activeIds={editActiveIds}
+                  onChange={({ personas, activeIds }) => {
+                    setEditPersonas(personas);
+                    setEditActiveIds(activeIds);
+                  }}
+                />
+              </div>
             </div>
             <div className="p-8 border-t bg-slate-50 flex justify-end">
               <button
-                onClick={() => saveProfileData({ ...userCtx, preferences: editPrefs })}
+                onClick={() =>
+                  saveProfileData({
+                    ...userCtx,
+                    preferences: editPrefs,
+                    personas: editPersonas,
+                    activePersonaIds: editActiveIds,
+                  })
+                }
                 className="px-12 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all"
               >
                 保存档案并同步审计逻辑
