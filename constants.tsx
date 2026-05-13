@@ -1,4 +1,3 @@
-
 import { Profile } from './types';
 
 export const FLASH_FILTER_PROMPT = (profile: Profile) => `

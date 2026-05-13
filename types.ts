@@ -1,4 +1,3 @@
-
 export interface Job {
   id: string;
   title: string;
@@ -10,10 +9,10 @@ export interface Job {
   importedAt: string;
   tags: string[];
   isFavorite?: boolean;
-  
+
   flashScore?: number;
   flashMatchReason?: string;
-  
+
   analysis?: {
     score: number;
     summary: string;
@@ -28,7 +27,7 @@ export interface Job {
     interview_tactics: string;
     contract_red_flags: string;
   };
-  
+
   chatHistory: { role: 'user' | 'model'; text: string; time: string }[];
 }
 

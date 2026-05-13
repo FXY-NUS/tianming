@@ -1,32 +1,32 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { Job, Profile } from "../types";
-import { FLASH_FILTER_PROMPT, PRO_AUDIT_PROMPT, CHAT_SYSTEM_PROMPT } from "../constants";
+import { GoogleGenAI, Type } from '@google/genai';
+import { Job, Profile } from '../types';
+import { FLASH_FILTER_PROMPT, PRO_AUDIT_PROMPT, CHAT_SYSTEM_PROMPT } from '../constants';
 
 // 统一从 localStorage 或 .env.local 拿 API Key
 const getApiKey = (): string => {
-  const fromLocal = typeof window !== "undefined" ? localStorage.getItem("GEMINI_API_KEY") : null;
+  const fromLocal = typeof window !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null;
   const fromEnv = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
-  return fromLocal || fromEnv || "";
+  return fromLocal || fromEnv || '';
 };
 
 const safeParse = (text: string | undefined) => {
   if (!text) return null;
   try {
-    const cleanText = text.replace(/```json|```/g, "").trim();
+    const cleanText = text.replace(/```json|```/g, '').trim();
     return JSON.parse(cleanText);
   } catch (e) {
-    console.error("JSON Parse Error:", text);
+    console.error('JSON Parse Error:', text);
     return null;
   }
 };
 
 export const batchScreenJobs = async (jobs: Job[], profile: Profile) => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
-  const chunkedJobs = jobs.map(j => ({
+  const chunkedJobs = jobs.map((j) => ({
     id: j.id,
     title: j.title,
     company: j.company,
-    snippet: j.content.substring(0, 800)
+    snippet: j.content.substring(0, 800),
   }));
 
   const response = await ai.models.generateContent({
@@ -34,7 +34,7 @@ export const batchScreenJobs = async (jobs: Job[], profile: Profile) => {
     contents: `执行初筛：${JSON.stringify(chunkedJobs)}`,
     config: {
       systemInstruction: FLASH_FILTER_PROMPT(profile),
-      responseMimeType: "application/json",
+      responseMimeType: 'application/json',
       responseSchema: {
         type: Type.ARRAY,
         items: {
@@ -42,12 +42,12 @@ export const batchScreenJobs = async (jobs: Job[], profile: Profile) => {
           properties: {
             id: { type: Type.STRING },
             score: { type: Type.NUMBER },
-            reason: { type: Type.STRING }
+            reason: { type: Type.STRING },
           },
-          required: ["id", "score", "reason"]
-        }
-      }
-    }
+          required: ['id', 'score', 'reason'],
+        },
+      },
+    },
   });
 
   return safeParse(response.text) || [];
@@ -60,7 +60,7 @@ export const deepAuditJob = async (job: Job, profile: Profile) => {
     contents: `启动天命深度审计。公司：${job.company}。职位：${job.title}。JD原文：${job.content}`,
     config: {
       systemInstruction: PRO_AUDIT_PROMPT(profile),
-      responseMimeType: "application/json",
+      responseMimeType: 'application/json',
       thinkingConfig: { thinkingBudget: 32768 },
       responseSchema: {
         type: Type.OBJECT,
@@ -73,22 +73,32 @@ export const deepAuditJob = async (job: Job, profile: Profile) => {
             type: Type.OBJECT,
             properties: {
               pros: { type: Type.ARRAY, items: { type: Type.STRING } },
-              cons: { type: Type.ARRAY, items: { type: Type.STRING } }
+              cons: { type: Type.ARRAY, items: { type: Type.STRING } },
             },
-            required: ["pros", "cons"]
+            required: ['pros', 'cons'],
           },
           cruel_truth_2026: { type: Type.STRING },
           career_growth: { type: Type.STRING },
           interview_tactics: { type: Type.STRING },
-          contract_red_flags: { type: Type.STRING }
+          contract_red_flags: { type: Type.STRING },
         },
-        required: ["score", "summary", "hexagram", "judgment", "detailed_analysis", "cruel_truth_2026", "career_growth", "interview_tactics", "contract_red_flags"]
-      }
-    }
+        required: [
+          'score',
+          'summary',
+          'hexagram',
+          'judgment',
+          'detailed_analysis',
+          'cruel_truth_2026',
+          'career_growth',
+          'interview_tactics',
+          'contract_red_flags',
+        ],
+      },
+    },
   });
 
   const parsed = safeParse(response.text);
-  if (!parsed) throw new Error("Pro Audit Parse Error");
+  if (!parsed) throw new Error('Pro Audit Parse Error');
   return parsed;
 };
 
@@ -102,7 +112,7 @@ export const sendMessageToJobConsultant = async (job: Job, profile: Profile, mes
   });
 
   const response = await chat.sendMessage({
-    message: `Context: ${job.content.substring(0, 2000)}\nUser: ${message}`
+    message: `Context: ${job.content.substring(0, 2000)}\nUser: ${message}`,
   });
   return response.text;
 };
