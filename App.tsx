@@ -1,40 +1,32 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Search, Upload, Sparkles, Star, MapPin, Building2, 
+import {
+  Search, Upload, Sparkles, Star, MapPin, Building2,
   Briefcase, Trash2, CheckCircle2, AlertCircle, RefreshCw,
   ArrowUpDown, Heart, ChevronRight, User, Save, Zap, ListChecks, Database, X, Brain, Send, MessageSquare, Activity,
   ShieldAlert, TrendingUp, Target, FileWarning, Key, RefreshCcw
 } from 'lucide-react';
-import { Job, Profile } from './types';
+import { Job, UserContext } from './types';
 import { batchScreenJobs, deepAuditJob, sendMessageToJobConsultant } from './services/geminiService';
-
-const DEFAULT_PROFILE: Profile = {
-  name: "阿棠",
-  bg: "NUS DSML硕士(GPA 4.5), 纯数背景(GPA 4.43), 汉学副修, Lean 4形式化验证, 擅长汉语写作(情感流), 英语口语一般",
-  astrology: "辛巳年辛卯月戊子日癸丑时。天府(守成/管理), 官禄天相(二把手), 身宫廉贪+文曲科(灵性/审美), 流年2026丙午(子午冲, 廉贞忌)",
-  preferences: "高薪, 策略/咨询/PM/技术分析方向, 0经验应届生, 避开纯底层代码，避开纯数学",
-  resumeContent: "" 
-};
+import { loadUserContext, saveUserContext } from './services/userContextStorage';
 
 const LOCAL_STORAGE_KEY_JOBS = 'career_navigator_jobs_v10';
-const LOCAL_STORAGE_KEY_PROFILE = 'career_navigator_profile';
 const LOCAL_STORAGE_KEY_USAGE = 'career_navigator_usage_v4';
 
 const App = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [userCtx, setUserCtx] = useState<UserContext>(() => loadUserContext());
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  
+
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [sortBy, setSortBy] = useState('Date'); 
+  const [sortBy, setSortBy] = useState('Date');
 
   const [isScreening, setIsScreening] = useState(false);
   const [isAuditing, setIsAuditing] = useState(false);
   const [importing, setImporting] = useState(false);
-  
+
   const [usage, setUsage] = useState({ flash: 0, pro: 0 });
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
@@ -43,17 +35,12 @@ const App = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const checkApiKey = async () => {
     const fromLocal = localStorage.getItem("GEMINI_API_KEY");
     const fromEnv = (import.meta as any).env?.VITE_GEMINI_API_KEY;
     setHasApiKey(!!(fromLocal || fromEnv));
-    };
-    checkApiKey();
 
     const savedJobs = localStorage.getItem(LOCAL_STORAGE_KEY_JOBS);
     if (savedJobs) setJobs(JSON.parse(savedJobs));
-    const savedProfile = localStorage.getItem(LOCAL_STORAGE_KEY_PROFILE);
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
     const savedUsage = localStorage.getItem(LOCAL_STORAGE_KEY_USAGE);
     if (savedUsage) setUsage(JSON.parse(savedUsage));
   }, []);
@@ -67,21 +54,21 @@ const App = () => {
   }, [usage]);
 
   const handleSelectKey = async () => {
-  const current = localStorage.getItem("GEMINI_API_KEY") || "";
-  const key = window.prompt("请粘贴你的 Gemini API Key（会保存在浏览器 localStorage）:", current);
-  if (key && key.trim()) {
-    localStorage.setItem("GEMINI_API_KEY", key.trim());
-    setHasApiKey(true);
-  }
+    const current = localStorage.getItem("GEMINI_API_KEY") || "";
+    const key = window.prompt("请粘贴你的 Gemini API Key（会保存在浏览器 localStorage）:", current);
+    if (key && key.trim()) {
+      localStorage.setItem("GEMINI_API_KEY", key.trim());
+      setHasApiKey(true);
+    }
   };
 
   const trackUsage = (type: 'flash' | 'pro') => {
     setUsage(prev => ({ ...prev, [type]: prev[type] + 1 }));
   };
 
-  const saveProfileData = (newProfile: Profile) => {
-    setProfile(newProfile);
-    localStorage.setItem(LOCAL_STORAGE_KEY_PROFILE, JSON.stringify(newProfile));
+  const saveProfileData = (updated: UserContext) => {
+    setUserCtx(updated);
+    saveUserContext(updated);
     setShowProfileModal(false);
   };
 
@@ -89,24 +76,18 @@ const App = () => {
     console.error(e);
     const errorStr = JSON.stringify(e);
     const errorMsg = e.toString();
-    
-    // 429: Resource Exhausted
+
     if (errorMsg.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
-      alert(`【额度耗尽】${type}触发了免费额度限制。\n\n建议：请等待 1 分钟再试，或点击右上角 Key 图标切换到一个“已开启结算”的项目 Key。`);
-    } 
-    // 400/401: Key Expired or Invalid
-    else if (errorMsg.includes("400") || errorMsg.includes("expired") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("API_KEY_INVALID")) {
+      alert(`【额度耗尽】${type}触发了免费额度限制。\n\n建议：请等待 1 分钟再试，或点击右上角 Key 图标切换到一个"已开启结算"的项目 Key。`);
+    } else if (errorMsg.includes("400") || errorMsg.includes("expired") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("API_KEY_INVALID")) {
       alert(`【Key 已失效】当前选择的 API Key 已过期或无效。\n\n请点击确定后，在弹出的窗口中选择一个新的、状态正常的付费项目 Key。`);
       setHasApiKey(false);
       handleSelectKey();
-    }
-    // 404: Not Found (often key/project related)
-    else if (errorMsg.includes("Requested entity was not found")) {
+    } else if (errorMsg.includes("Requested entity was not found")) {
       alert("选定的 API 项目未找到，正在重置 Key 选择状态...");
       setHasApiKey(false);
       handleSelectKey();
-    }
-    else {
+    } else {
       alert(`${type}过程中发生异常，请检查控制台或重试。`);
     }
   };
@@ -114,22 +95,22 @@ const App = () => {
   const handleBatchScreen = async () => {
     const unscreened = jobs.filter(j => !j.flashScore && j.status === 'New').slice(0, 30);
     if (unscreened.length === 0) return alert("当前批次已处理完毕");
-    
+
     setIsScreening(true);
     try {
-      const results = await batchScreenJobs(unscreened, profile);
+      const results = await batchScreenJobs(unscreened, userCtx);
       trackUsage('flash');
-      
+
       setJobs(prev => {
         const updated = [...prev];
         results.forEach((res: any) => {
           const index = updated.findIndex(j => String(j.id) === String(res.id));
           if (index !== -1) {
-            updated[index] = { 
-              ...updated[index], 
-              flashScore: res.score, 
-              flashMatchReason: res.reason, 
-              status: 'Screened' 
+            updated[index] = {
+              ...updated[index],
+              flashScore: res.score,
+              flashMatchReason: res.reason,
+              status: 'Screened'
             };
           }
         });
@@ -145,7 +126,7 @@ const App = () => {
   const handleDeepAudit = async (job: Job) => {
     setIsAuditing(true);
     try {
-      const analysis = await deepAuditJob(job, profile);
+      const analysis = await deepAuditJob(job, userCtx);
       trackUsage('pro');
       const updates = { analysis, status: (analysis.score >= 80 ? 'High Match' : 'Screened') as Job['status'] };
       updateJobData(job.id, updates);
@@ -215,7 +196,7 @@ const App = () => {
     setChatInput('');
     setIsChatting(true);
     try {
-      const response = await sendMessageToJobConsultant(selectedJob, profile, chatInput);
+      const response = await sendMessageToJobConsultant(selectedJob, userCtx, chatInput);
       trackUsage('flash');
       const aiMsg = { role: 'model' as const, text: response, time: new Date().toLocaleTimeString() };
       updateJobData(selectedJob.id, { chatHistory: [...newHistory, aiMsg] });
@@ -235,7 +216,7 @@ const App = () => {
     return jobs
       .filter(j => {
         const matchT = j.title.toLowerCase().includes(filter.toLowerCase()) || j.company.toLowerCase().includes(filter.toLowerCase());
-        const matchS = statusFilter === 'All' ? true : 
+        const matchS = statusFilter === 'All' ? true :
                       statusFilter === 'Fav' ? j.isFavorite :
                       j.status === (statusFilter === 'HighMatch' ? 'High Match' : statusFilter);
         return matchT && matchS;
@@ -246,28 +227,35 @@ const App = () => {
       });
   }, [jobs, filter, statusFilter, sortBy]);
 
+  // Local edit state for profile modal
+  const [editPrefs, setEditPrefs] = useState(userCtx.preferences);
+  const openProfileModal = () => {
+    setEditPrefs(userCtx.preferences);
+    setShowProfileModal(true);
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
       {/* Sidebar */}
       <div className="w-[360px] bg-white border-r flex flex-col shadow-xl shrink-0 z-20">
         <div className="p-4 bg-indigo-900 text-white shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="font-black text-lg flex items-center gap-2"><Sparkles className="text-yellow-400" size={18} /> 天命 7.0</h1>
+            <h1 className="font-black text-lg flex items-center gap-2"><Sparkles className="text-yellow-400" size={18} /> 天命 8.0</h1>
             <div className="flex items-center gap-2">
               <div className="text-right mr-1">
                 <p className="text-[9px] font-mono text-yellow-400/60 leading-none">F:{usage.flash} P:{usage.pro}</p>
               </div>
-              <button 
-                onClick={handleSelectKey} 
+              <button
+                onClick={handleSelectKey}
                 className={`p-1.5 rounded-full transition-all flex items-center justify-center ${hasApiKey ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/30 text-rose-200 animate-pulse'}`}
                 title={hasApiKey ? "已连接 API (点击更换)" : "未连接 API (点击设置)"}
               >
                 {hasApiKey ? <Key size={16}/> : <AlertCircle size={16}/>}
               </button>
-              <button onClick={() => setShowProfileModal(true)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors"><User size={18}/></button>
+              <button onClick={openProfileModal} className="p-1.5 hover:bg-white/10 rounded-full transition-colors"><User size={18}/></button>
             </div>
           </div>
-          
+
           <div className="bg-indigo-950/40 rounded-xl p-2.5 border border-white/5">
             <div className="flex justify-between items-center mb-1.5 px-1">
                <span className="text-[9px] font-bold text-indigo-200 uppercase tracking-tighter">极速批处理 (30份/次)</span>
@@ -290,7 +278,7 @@ const App = () => {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="搜索岗位或公司..." className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500" />
           </div>
-          
+
           <div className="flex gap-2">
              <label className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-slate-100">
                 <Upload size={12}/> 导入 JSON
@@ -332,7 +320,7 @@ const App = () => {
                 </div>
               </div>
               <div className="text-[11px] text-slate-500 font-medium mb-2">{job.company}</div>
-              {job.flashMatchReason && <div className={`text-[10px] p-2 rounded-lg line-clamp-2 italic ${job.flashScore && job.flashScore < 20 ? 'bg-slate-200/50 text-slate-400' : 'bg-white/50 border border-indigo-100 text-indigo-700'}`}>“{job.flashMatchReason}”</div>}
+              {job.flashMatchReason && <div className={`text-[10px] p-2 rounded-lg line-clamp-2 italic ${job.flashScore && job.flashScore < 20 ? 'bg-slate-200/50 text-slate-400' : 'bg-white/50 border border-indigo-100 text-indigo-700'}`}>"{job.flashMatchReason}"</div>}
               <div className="flex items-center justify-between mt-3">
                 <span className="text-[9px] text-slate-400">{new Date(job.importedAt).toLocaleDateString()}</span>
                 <Trash2 onClick={(e) => { e.stopPropagation(); setJobs(prev => prev.filter(j => j.id !== job.id)); if (selectedJob?.id === job.id) setSelectedJob(null); }} size={14} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"/>
@@ -398,7 +386,7 @@ const App = () => {
                              <h2 className="text-2xl font-black text-yellow-400">审计仪表盘</h2>
                              <span className="px-3 py-1 bg-white/10 rounded-full text-[11px] font-bold border border-white/20">{selectedJob.analysis.hexagram}</span>
                           </div>
-                          <p className="text-xl leading-relaxed italic font-medium text-white/90">“{selectedJob.analysis.summary}”</p>
+                          <p className="text-xl leading-relaxed italic font-medium text-white/90">"{selectedJob.analysis.summary}"</p>
                           <div className={`inline-block px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest ${selectedJob.analysis.judgment.includes('强烈推荐') ? 'bg-emerald-500' : selectedJob.analysis.judgment.includes('谨慎尝试') ? 'bg-amber-500' : 'bg-rose-500'}`}>
                             {selectedJob.analysis.judgment}
                           </div>
@@ -434,7 +422,7 @@ const App = () => {
 
                     <div className="bg-indigo-50 p-8 rounded-[2rem] border border-indigo-100 shadow-inner">
                       <h4 className="text-indigo-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 mb-4"><Zap size={18}/> 2026 流年真相预演</h4>
-                      <p className="text-lg leading-relaxed text-indigo-950 font-medium italic">“{selectedJob.analysis.cruel_truth_2026}”</p>
+                      <p className="text-lg leading-relaxed text-indigo-950 font-medium italic">"{selectedJob.analysis.cruel_truth_2026}"</p>
                     </div>
                   </div>
                 ) : (
@@ -488,7 +476,7 @@ const App = () => {
                <Sparkles size={80} className="text-indigo-50 group-hover:text-indigo-100 transition-colors" />
             </div>
             <h2 className="text-2xl font-black text-slate-400 tracking-tighter">选定一个职位开启天命审计</h2>
-            <p className="text-slate-400 mt-4 max-w-sm italic">“每一份 JD 都将被剥去伪装。”</p>
+            <p className="text-slate-400 mt-4 max-w-sm italic">"每一份 JD 都将被剥去伪装。"</p>
           </div>
         )}
       </div>
@@ -508,20 +496,29 @@ const App = () => {
             </div>
             <div className="p-10 overflow-y-auto space-y-8 no-scrollbar">
                <div className="space-y-4">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest">命主姓名</label>
+                  <input value={editPrefs.displayName} onChange={e => setEditPrefs({...editPrefs, displayName: e.target.value})} className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all" />
+               </div>
+               <div className="space-y-4">
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest">教育、硬核技能与现实背景</label>
-                  <textarea value={profile.bg} onChange={e => setProfile({...profile, bg: e.target.value})} className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all" />
+                  <textarea value={editPrefs.backgroundSummary} onChange={e => setEditPrefs({...editPrefs, backgroundSummary: e.target.value})} className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all" />
                </div>
                <div className="space-y-4">
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest">命理特征与 2026 流年避讳</label>
-                  <textarea value={profile.astrology} onChange={e => setProfile({...profile, astrology: e.target.value})} className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all" />
+                  <textarea value={editPrefs.astrologyProfile} onChange={e => setEditPrefs({...editPrefs, astrologyProfile: e.target.value})} className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all" />
                </div>
                <div className="space-y-4">
                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest">择业偏好与限制条件</label>
-                  <input value={profile.preferences} onChange={e => setProfile({...profile, preferences: e.target.value})} className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all" />
+                  <input value={editPrefs.jobPreferences} onChange={e => setEditPrefs({...editPrefs, jobPreferences: e.target.value})} className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all" />
                </div>
             </div>
             <div className="p-8 border-t bg-slate-50 flex justify-end">
-               <button onClick={() => saveProfileData(profile)} className="px-12 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all">保存档案并同步审计逻辑</button>
+               <button
+                 onClick={() => saveProfileData({ ...userCtx, preferences: editPrefs })}
+                 className="px-12 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all"
+               >
+                 保存档案并同步审计逻辑
+               </button>
             </div>
           </div>
         </div>
