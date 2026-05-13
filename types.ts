@@ -10,10 +10,10 @@ export interface Job {
   importedAt: string;
   tags: string[];
   isFavorite?: boolean;
-  
+
   flashScore?: number;
   flashMatchReason?: string;
-  
+
   analysis?: {
     score: number;
     summary: string;
@@ -28,11 +28,47 @@ export interface Job {
     interview_tactics: string;
     contract_red_flags: string;
   };
-  
+
   chatHistory: { role: 'user' | 'model'; text: string; time: string }[];
 }
 
-export interface Profile {
+// ── Phase 1: UserContext data model ──────────────────────────────────────────
+
+export interface UserPreferences {
+  displayName: string;
+  backgroundSummary: string;   // education, skills, background
+  astrologyProfile: string;    // 命理 + 流年
+  jobPreferences: string;      // salary, direction, avoidance (freeform)
+  preferredLocations: string[];
+  avoidKeywords: string[];
+}
+
+export interface ResumeProfile {
+  id: string;
+  name: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonaInstance {
+  id: string;
+  type: 'mbti' | 'holland' | 'big5' | 'bazi';
+  label: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface UserContext {
+  personas: PersonaInstance[];
+  resumes: ResumeProfile[];
+  preferences: UserPreferences;
+  activeResumeId?: string;
+  activePersonaIds: string[];
+}
+
+// Legacy type kept only for migration reading — do not use in new code
+export interface LegacyProfile {
   name: string;
   bg: string;
   astrology: string;
