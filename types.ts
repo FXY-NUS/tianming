@@ -31,6 +31,11 @@ export interface Job {
   chatHistory: { role: 'user' | 'model'; text: string; time: string }[];
 }
 
+/**
+ * @deprecated V7.0 flat profile. Superseded by `UserContext` in
+ * `src/core/types.ts`. Kept for the legacy adapter (commit 6) and the
+ * localStorage migration (commit 5); will be removed after Phase 2.
+ */
 export interface Profile {
   name: string;
   bg: string;
@@ -38,3 +43,6 @@ export interface Profile {
   preferences: string;
   resumeContent: string;
 }
+
+/** Semantic alias for migration code. */
+export type LegacyProfile = Profile;
