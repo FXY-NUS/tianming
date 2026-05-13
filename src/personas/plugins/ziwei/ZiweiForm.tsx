@@ -1,5 +1,6 @@
-import type { FC } from 'react';
+import { useState, type FC } from 'react';
 import type { PersonaFormProps } from '../../PersonaPlugin';
+import { TIME_SLOT_LABELS, computeZiweiChart, type CalendarType, type Gender } from './iztro';
 import {
   OPTIONAL_PALACES,
   PALACE_HINT,
@@ -83,11 +84,138 @@ export function ZiweiForm({ value, onChange }: PersonaFormProps<ZiweiData>) {
     onChange({ ...value, [key]: next });
   };
 
+  const [autoOpen, setAutoOpen] = useState(false);
+  const [calendar, setCalendar] = useState<CalendarType>('solar');
+  const [birthDate, setBirthDate] = useState('');
+  const [hourIndex, setHourIndex] = useState(0);
+  const [gender, setGender] = useState<Gender>('女');
+  const [isLeapMonth, setIsLeapMonth] = useState(false);
+  const [isComputing, setIsComputing] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+
+  const runAutoChart = async () => {
+    if (!birthDate) {
+      setChartError('请先填生日');
+      return;
+    }
+    setIsComputing(true);
+    setChartError(null);
+    try {
+      const result = await computeZiweiChart({
+        date: birthDate,
+        hourIndex,
+        gender,
+        calendar,
+        isLeapMonth: calendar === 'lunar' ? isLeapMonth : undefined,
+      });
+      onChange({ ...value, ...result });
+    } catch (e) {
+      setChartError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsComputing(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
         紫微斗数 plugin 会在每次匹配时往 Gemini Pro 注入 ~400 token。
-        如果你不熟悉自己的星盘，下一版本会加"自动排盘"按钮（按生日计算）。
+      </div>
+
+      <div className="rounded-xl border-2 border-indigo-100 bg-indigo-50/40">
+        <button
+          type="button"
+          onClick={() => setAutoOpen((o) => !o)}
+          className="flex w-full items-center justify-between p-3 text-sm font-semibold text-indigo-700"
+        >
+          <span>🌟 自动排盘（不懂紫微？填生日即可）</span>
+          <span className="text-xs">{autoOpen ? '收起 ▲' : '展开 ▼'}</span>
+        </button>
+        {autoOpen && (
+          <div className="space-y-2 px-3 pb-3 text-sm">
+            <div className="flex gap-3">
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="radio"
+                  name="ziwei-cal"
+                  checked={calendar === 'solar'}
+                  onChange={() => setCalendar('solar')}
+                />
+                公历
+              </label>
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="radio"
+                  name="ziwei-cal"
+                  checked={calendar === 'lunar'}
+                  onChange={() => setCalendar('lunar')}
+                />
+                农历
+              </label>
+              {calendar === 'lunar' && (
+                <label className="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={isLeapMonth}
+                    onChange={(e) => setIsLeapMonth(e.target.checked)}
+                  />
+                  闰月
+                </label>
+              )}
+            </div>
+            <input
+              type="date"
+              className="w-full rounded-lg border-2 border-white bg-white p-2 text-sm"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+            />
+            <select
+              className="w-full rounded-lg border-2 border-white bg-white p-2 text-sm"
+              value={hourIndex}
+              onChange={(e) => setHourIndex(Number(e.target.value))}
+            >
+              {TIME_SLOT_LABELS.map((label, i) => (
+                <option key={i} value={i}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="radio"
+                  name="ziwei-gender"
+                  checked={gender === '女'}
+                  onChange={() => setGender('女')}
+                />
+                女
+              </label>
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="radio"
+                  name="ziwei-gender"
+                  checked={gender === '男'}
+                  onChange={() => setGender('男')}
+                />
+                男
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={runAutoChart}
+              disabled={isComputing}
+              className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white shadow hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {isComputing ? '排盘中…' : '计算并填入下方宫位'}
+            </button>
+            {chartError && (
+              <div className="rounded bg-rose-100 p-2 text-xs text-rose-700">{chartError}</div>
+            )}
+            <div className="text-xs text-slate-500">
+              排盘后下方所有字段可手动微调；生日不会被保存（仅本次计算用）。
+            </div>
+          </div>
+        )}
       </div>
 
       {REQUIRED_PALACES.map((key) => (
