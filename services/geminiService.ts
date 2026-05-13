@@ -1,8 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { Job, Profile } from "../types";
+import { Job, UserContext } from "../types";
 import { FLASH_FILTER_PROMPT, PRO_AUDIT_PROMPT, CHAT_SYSTEM_PROMPT } from "../constants";
 
-// 统一从 localStorage 或 .env.local 拿 API Key
 const getApiKey = (): string => {
   const fromLocal = typeof window !== "undefined" ? localStorage.getItem("GEMINI_API_KEY") : null;
   const fromEnv = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
@@ -20,7 +19,7 @@ const safeParse = (text: string | undefined) => {
   }
 };
 
-export const batchScreenJobs = async (jobs: Job[], profile: Profile) => {
+export const batchScreenJobs = async (jobs: Job[], ctx: UserContext) => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const chunkedJobs = jobs.map(j => ({
     id: j.id,
@@ -33,7 +32,7 @@ export const batchScreenJobs = async (jobs: Job[], profile: Profile) => {
     model: 'gemini-3-flash-preview',
     contents: `执行初筛：${JSON.stringify(chunkedJobs)}`,
     config: {
-      systemInstruction: FLASH_FILTER_PROMPT(profile),
+      systemInstruction: FLASH_FILTER_PROMPT(ctx),
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.ARRAY,
@@ -53,13 +52,13 @@ export const batchScreenJobs = async (jobs: Job[], profile: Profile) => {
   return safeParse(response.text) || [];
 };
 
-export const deepAuditJob = async (job: Job, profile: Profile) => {
+export const deepAuditJob = async (job: Job, ctx: UserContext) => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: `启动天命深度审计。公司：${job.company}。职位：${job.title}。JD原文：${job.content}`,
     config: {
-      systemInstruction: PRO_AUDIT_PROMPT(profile),
+      systemInstruction: PRO_AUDIT_PROMPT(ctx),
       responseMimeType: "application/json",
       thinkingConfig: { thinkingBudget: 32768 },
       responseSchema: {
@@ -92,12 +91,12 @@ export const deepAuditJob = async (job: Job, profile: Profile) => {
   return parsed;
 };
 
-export const sendMessageToJobConsultant = async (job: Job, profile: Profile, message: string) => {
+export const sendMessageToJobConsultant = async (job: Job, ctx: UserContext, message: string) => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const chat = ai.chats.create({
     model: 'gemini-3-flash-preview',
     config: {
-      systemInstruction: CHAT_SYSTEM_PROMPT(job.title, job.company, profile),
+      systemInstruction: CHAT_SYSTEM_PROMPT(job.title, job.company, ctx),
     },
   });
 
