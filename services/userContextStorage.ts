@@ -22,15 +22,17 @@ export const DEFAULT_USER_CONTEXT: UserContext = {
 
 function migrateFromLegacy(raw: string): UserContext {
   const p = JSON.parse(raw) as LegacyProfile;
-  const hasResume = !!(p.resumeContent?.trim());
+  const hasResume = !!p.resumeContent?.trim();
   const resume = hasResume
-    ? [{
-        id: 'resume-legacy',
-        name: '默认简历',
-        content: p.resumeContent,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }]
+    ? [
+        {
+          id: 'resume-legacy',
+          name: '默认简历',
+          content: p.resumeContent,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ]
     : [];
 
   return {

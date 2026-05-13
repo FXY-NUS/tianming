@@ -1,4 +1,3 @@
-
 import { UserContext } from './types';
 
 export const FLASH_FILTER_PROMPT = (ctx: UserContext) => `
