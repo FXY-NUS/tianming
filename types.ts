@@ -52,7 +52,8 @@ export interface ResumeProfile {
 
 export interface PersonaInstance {
   id: string;
-  type: 'mbti' | 'holland' | 'big5' | 'bazi';
+  /** Plugin id from the persona registry (e.g. 'mbti', 'holland', 'big5', 'ziwei'). */
+  type: string;
   label: string;
   data: Record<string, unknown>;
   createdAt: string;
