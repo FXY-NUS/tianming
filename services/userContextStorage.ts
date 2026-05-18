@@ -8,12 +8,10 @@ export const DEFAULT_USER_CONTEXT: UserContext = {
   personas: [],
   resumes: [],
   preferences: {
-    displayName: '阿棠',
-    backgroundSummary:
-      'NUS DSML硕士(GPA 4.5), 纯数背景(GPA 4.43), 汉学副修, Lean 4形式化验证, 擅长汉语写作(情感流), 英语口语一般',
-    astrologyProfile:
-      '辛巳年辛卯月戊子日癸丑时。天府(守成/管理), 官禄天相(二把手), 身宫廉贪+文曲科(灵性/审美), 流年2026丙午(子午冲, 廉贞忌)',
-    jobPreferences: '高薪, 策略/咨询/PM/技术分析方向, 0经验应届生, 避开纯底层代码，避开纯数学',
+    displayName: '',
+    backgroundSummary: '',
+    astrologyProfile: '',
+    jobPreferences: '',
     preferredLocations: [],
     avoidKeywords: [],
   },

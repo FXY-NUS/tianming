@@ -158,6 +158,7 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
   };
 
   const handleAddNew = () => {
+    setLocalActiveId(undefined);
     setActiveTab('upload');
     setUploadState('idle');
     setErrorMessage('');

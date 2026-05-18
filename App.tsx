@@ -559,8 +559,8 @@ const App = () => {
                       </div>
                       <div className="flex items-center gap-10 relative z-10">
                         <div className="text-center shrink-0">
-                          <div className="text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 to-yellow-500">
-                            {selectedJob.analysis.score}
+                          <div className="text-8xl font-black text-yellow-400">
+                            {selectedJob.analysis.score ?? '—'}
                           </div>
                           <div className="text-[10px] font-black tracking-[0.3em] text-indigo-400 mt-2">
                             DESTINY SCORE
