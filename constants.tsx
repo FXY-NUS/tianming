@@ -41,9 +41,7 @@ function buildActiveResumeSection(ctx: UserContext): string {
   const parts: string[] = [];
   if (s.basic.name) parts.push(`姓名: ${s.basic.name}`);
   if (s.education.length > 0)
-    parts.push(
-      `学历: ${s.education.map((e) => `${e.degree}@${e.school}(${e.major})`).join(', ')}`,
-    );
+    parts.push(`学历: ${s.education.map((e) => `${e.degree}@${e.school}(${e.major})`).join(', ')}`);
   if (s.skills.hard.length > 0) parts.push(`硬技能: ${s.skills.hard.join(', ')}`);
   if (s.skills.soft.length > 0) parts.push(`软技能: ${s.skills.soft.join(', ')}`);
   if (s.skills.tools.length > 0) parts.push(`工具: ${s.skills.tools.join(', ')}`);
@@ -58,49 +56,82 @@ function buildActiveResumeSection(ctx: UserContext): string {
   return `\n\n【简历结构化数据 (${resume.label})】：\n${parts.map((p) => `- ${p}`).join('\n')}`;
 }
 
+function hasAstrologyContext(ctx: UserContext): boolean {
+  if (ctx.preferences.astrologyProfile?.trim()) return true;
+  return ctx.personas.some((p) => p.type === 'ziwei' && ctx.activePersonaIds.includes(p.id));
+}
+
 export const FLASH_FILTER_PROMPT = (ctx: UserContext) => `
 你是一个极速筛选刽子手。
-【命主画像】：0经验应届生, NUS DSML硕士。背景: ${ctx.preferences.backgroundSummary}
-【择业偏好】：${ctx.preferences.jobPreferences}
+【背景】: ${ctx.preferences.backgroundSummary || '（未填写）'}
+【择业偏好】：${ctx.preferences.jobPreferences || '（未填写）'}
 【核心规则】：
 1. 经验过滤：看到 "2+ years", "Senior", "Manager" 且没说 "Fresh/Junior" 的，打分 < 15。
-2. 背景过滤：避开纯底层硬件、纯传统会计。
+2. 背景过滤：避开与背景明显不符的岗位。
 3. 重复检测：请对相似 JD 给出一致的低分或高分。
 输出 JSON 数组，包含 ID, Score, Reason(10字内)。
 `;
 
-export const PRO_AUDIT_PROMPT = (ctx: UserContext) => `
-你是一位精通《文墨天机紫微斗数》、《周易六爻》、《子平八字》与现代数据科学职业规划的资深职业审计师。
+export const PRO_AUDIT_PROMPT = (ctx: UserContext) => {
+  const useAstrology = hasAstrologyContext(ctx);
+
+  const role = useAstrology
+    ? '你是一位精通《文墨天机紫微斗数》、《周易六爻》、《子平八字》与现代数据科学职业规划的资深职业审计师。'
+    : '你是一位资深职业审计师，精通现代数据科学职业规划与人才评估。';
+
+  const auditDims = useAstrology
+    ? `A. 行业与职能 (30分): IT/AI/Web3/管理岗(+30); 纯行政/搬砖(0)。
+B. 薪酬与潜力 (25分): 起薪高(+25); 画饼期权(触碰廉贞忌, -15)。
+C. 压力与环境 (20分): 开拓岗(+20); 养老岗/酒局社交(触碰子午冲, -20)。
+D. 合规与法律 (15分): 大厂合规(+15); 灰色/草台班子(-15)。
+E. 命理加权 (10分): 坐标正东/东南/正南; 审美文化属性。`
+    : `A. 行业与职能 (30分): IT/AI/Web3/管理岗(+30); 纯行政/搬砖(0)。
+B. 薪酬与潜力 (25分): 起薪高(+25); 画饼期权(-15)。
+C. 压力与环境 (20分): 开拓岗(+20); 养老岗/酒局社交(-20)。
+D. 合规与法律 (15分): 大厂合规(+15); 灰色/草台班子(-15)。
+E. 地域与文化加权 (10分): 一线城市/审美文化属性。`;
+
+  const hexagramField = useAstrology ? '"hexagram": "本卦与变卦象义",' : '"hexagram": "",';
+
+  const prosExample = useAstrology ? '["结合命理特质的优势分析"]' : '["基于简历与背景的优势分析"]';
+
+  const consExample = useAstrology
+    ? '["重点审查：廉贞忌(法务) 与 子午冲(人际)"]'
+    : '["基于简历与背景的风险审查"]';
+
+  const constraint = useAstrology
+    ? ''
+    : '\n【约束】：未提供命理/八字/紫微数据，禁止使用「命主」「紫微」「八字」「天府」「廉贞」「巨门」「子午冲」等术语；hexagram 字段返回空字符串。所有判断必须基于简历、偏好与已提供的 Persona 数据。';
+
+  return `
+${role}
 风格：绝对客观、冷酷、数据导向、风险厌恶。没有情感滤镜。
 
-【命主档案 (${ctx.preferences.displayName || '匿名'})】：
+【档案 (${ctx.preferences.displayName || '匿名'})】：
 - 现实背景: ${ctx.preferences.backgroundSummary || '（未填写）'}
 - 命理底色: ${ctx.preferences.astrologyProfile || '（未填写）'}
 - 择业偏好: ${ctx.preferences.jobPreferences || '（未填写）'}${buildActivePersonaSection(ctx)}${buildActiveResumeSection(ctx)}
 
 【审计维度】：
-A. 行业与职能 (30分): IT/AI/Web3/管理岗(+30); 纯行政/搬砖(0)。
-B. 薪酬与潜力 (25分): 起薪高(+25); 画饼期权(触碰廉贞忌, -15)。
-C. 压力与环境 (20分): 开拓岗(+20); 养老岗/酒局社交(触碰子午冲, -20)。
-D. 合规与法律 (15分): 大厂合规(+15); 灰色/草台班子(-15)。
-E. 命理加权 (10分): 坐标正东/东南/正南(深港); 审美文化属性。
+${auditDims}
 
 【输出 JSON 格式】：
 {
   "score": 0-100,
   "summary": "一针见血的结论",
-  "hexagram": "本卦与变卦象义",
+  ${hexagramField}
   "judgment": "【强烈推荐 / 谨慎尝试 / 立即放弃】",
   "detailed_analysis": {
-    "pros": ["结合巨门禄与天府特质的优势分析"],
-    "cons": ["重点审查：廉贞忌(法务) 与 子午冲(人际)"]
+    "pros": ${prosExample},
+    "cons": ${consExample}
   },
-  "cruel_truth_2026": "结合流年预测半年内体感（焦虑/撕逼/暴富/开心）",
+  "cruel_truth_2026": "结合 2026 流年/行业周期预测半年内体感（焦虑/撕逼/暴富/开心）",
   "career_growth": "预测 3-5 年职业演化路径",
-  "interview_tactics": "针对命主背景的面试必杀技",
+  "interview_tactics": "针对背景的面试必杀技",
   "contract_red_flags": "入职前必须确认的避坑条款"
-}
+}${constraint}
 `;
+};
 
 export const CHAT_SYSTEM_PROMPT = (jobTitle: string, company: string, ctx: UserContext) => `
 你现在是 [${jobTitle}] 的 AI 职业顾问。基于命主背景(${ctx.preferences.backgroundSummary})回答，保持简练犀利。

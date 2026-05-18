@@ -569,9 +569,11 @@ const App = () => {
                         <div className="space-y-4">
                           <div className="flex items-center gap-3">
                             <h2 className="text-2xl font-black text-yellow-400">审计仪表盘</h2>
-                            <span className="px-3 py-1 bg-white/10 rounded-full text-[11px] font-bold border border-white/20">
-                              {selectedJob.analysis.hexagram}
-                            </span>
+                            {selectedJob.analysis.hexagram && (
+                              <span className="px-3 py-1 bg-white/10 rounded-full text-[11px] font-bold border border-white/20">
+                                {selectedJob.analysis.hexagram}
+                              </span>
+                            )}
                           </div>
                           <p className="text-xl leading-relaxed italic font-medium text-white/90">
                             "{selectedJob.analysis.summary}"
