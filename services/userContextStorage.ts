@@ -49,6 +49,34 @@ function migrateFromLegacy(raw: string): UserContext {
   };
 }
 
+function isValidUserContext(obj: unknown): obj is UserContext {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    Array.isArray(o.personas) &&
+    Array.isArray(o.resumes) &&
+    !!o.preferences &&
+    typeof o.preferences === 'object' &&
+    Array.isArray(o.activePersonaIds)
+  );
+}
+
+function normalizePreferences(p: unknown): UserContext['preferences'] {
+  if (!p || typeof p !== 'object') return { ...DEFAULT_USER_CONTEXT.preferences };
+  const obj = p as Record<string, unknown>;
+  const stringArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+  return {
+    displayName: str(obj.displayName),
+    backgroundSummary: str(obj.backgroundSummary),
+    astrologyProfile: str(obj.astrologyProfile),
+    jobPreferences: str(obj.jobPreferences),
+    preferredLocations: stringArr(obj.preferredLocations),
+    avoidKeywords: stringArr(obj.avoidKeywords),
+  };
+}
+
 function migrateFromV1(raw: string): UserContext {
   interface V1UserContext {
     personas: unknown[];
@@ -66,7 +94,7 @@ function migrateFromV1(raw: string): UserContext {
 
   const v1 = JSON.parse(raw) as V1UserContext;
 
-  const newResumes = v1.resumes.map((old) => ({
+  const newResumes = (Array.isArray(v1.resumes) ? v1.resumes : []).map((old) => ({
     id: old.id,
     label: old.name,
     // Preserve v1 plain-text content as rawText so users don't lose data;
@@ -85,11 +113,11 @@ function migrateFromV1(raw: string): UserContext {
   }));
 
   return {
-    personas: v1.personas as UserContext['personas'],
+    personas: Array.isArray(v1.personas) ? (v1.personas as UserContext['personas']) : [],
     resumes: newResumes,
-    preferences: v1.preferences as UserContext['preferences'],
+    preferences: normalizePreferences(v1.preferences),
     activeResumeId: v1.activeResumeId,
-    activePersonaIds: v1.activePersonaIds,
+    activePersonaIds: Array.isArray(v1.activePersonaIds) ? v1.activePersonaIds : [],
   };
 }
 
@@ -97,7 +125,11 @@ export function loadUserContext(): UserContext {
   try {
     // Tier 1: v2 (current)
     const v2 = localStorage.getItem(USER_CONTEXT_KEY);
-    if (v2) return JSON.parse(v2) as UserContext;
+    if (v2) {
+      const parsed = JSON.parse(v2);
+      if (isValidUserContext(parsed)) return parsed;
+      // malformed v2 — fall through to lower tiers
+    }
 
     // Tier 2: v1 (Phase 1/2)
     const v1 = localStorage.getItem(USER_CONTEXT_V1_KEY);

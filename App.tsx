@@ -841,7 +841,6 @@ const App = () => {
         onSave={(newCtx) => {
           setUserCtx(newCtx);
           saveUserContext(newCtx);
-          setShowResumeModal(false);
         }}
       />
     </div>
