@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2, Edit2 } from 'lucide-react';
 import type { UserContext, ResumeProfile, ResumeStructured } from '../../types';
 import { parseResumeFile, parseResumeText } from '../../services/resumeParser';
 
@@ -21,6 +21,11 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
   const [structured, setStructured] = useState<ResumeStructured | null>(null);
   const [retryText, setRetryText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState('');
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [localResumes, setLocalResumes] = useState<ResumeProfile[]>(ctx.resumes);
+  const [localActiveId, setLocalActiveId] = useState(ctx.activeResumeId);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -81,7 +86,47 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     }
   };
 
-  const handleSave = () => {
+  const handleStartEdit = (resumeId: string) => {
+    const resume = localResumes.find((r) => r.id === resumeId);
+    if (resume) {
+      setEditingId(resumeId);
+      setEditingLabel(resume.label);
+    }
+  };
+
+  const handleSaveLabel = (resumeId: string) => {
+    if (!editingLabel.trim()) return;
+    const updatedResumes = localResumes.map((r) =>
+      r.id === resumeId ? { ...r, label: editingLabel } : r,
+    );
+    setLocalResumes(updatedResumes);
+    setEditingId(null);
+  };
+
+  const handleDeleteResume = (resumeId: string) => {
+    const updatedResumes = localResumes.filter((r) => r.id !== resumeId);
+    let newActiveId = localActiveId;
+
+    if (localActiveId === resumeId) {
+      newActiveId = updatedResumes.length > 0 ? updatedResumes[0].id : undefined;
+    }
+
+    setLocalResumes(updatedResumes);
+    setLocalActiveId(newActiveId);
+
+    if (updatedResumes.length === 0) {
+      setStructured(null);
+      setActiveTab('upload');
+    } else if (newActiveId) {
+      const activeResume = updatedResumes.find((r) => r.id === newActiveId);
+      if (activeResume) {
+        setStructured(activeResume.structured);
+        setFileName(activeResume.label);
+      }
+    }
+  };
+
+  const handleSaveNewResume = () => {
     if (!structured) return;
 
     const newResume: ResumeProfile = {
@@ -92,18 +137,11 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
       createdAt: new Date().toISOString(),
     };
 
-    const newCtx: UserContext = {
-      ...ctx,
-      resumes: [newResume],
-      activeResumeId: newResume.id,
-    };
+    const updatedResumes = [...localResumes, newResume];
+    setLocalResumes(updatedResumes);
+    setLocalActiveId(newResume.id);
 
-    onSave(newCtx);
-    resetModal();
-    onClose();
-  };
-
-  const resetModal = () => {
+    // Reset upload form
     setActiveTab('upload');
     setUploadState('idle');
     setErrorMessage('');
@@ -112,72 +150,188 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     setRetryText('');
   };
 
+  const handleAddNew = () => {
+    setActiveTab('upload');
+    setUploadState('idle');
+    setErrorMessage('');
+    setFileName('');
+    setStructured(null);
+    setRetryText('');
+  };
+
+  const handleSelectResume = (resumeId: string) => {
+    setLocalActiveId(resumeId);
+    const resume = localResumes.find((r) => r.id === resumeId);
+    if (resume) {
+      setStructured(resume.structured);
+      setFileName(resume.label);
+      setActiveTab('review');
+      setUploadState('success');
+    }
+  };
+
+  const handleApplyChanges = () => {
+    let updatedResumes = localResumes;
+    if (localActiveId && structured) {
+      updatedResumes = localResumes.map((r) =>
+        r.id === localActiveId ? { ...r, structured, label: fileName || r.label } : r,
+      );
+    }
+    const newCtx: UserContext = {
+      ...ctx,
+      resumes: updatedResumes,
+      activeResumeId: localActiveId,
+    };
+    onSave(newCtx);
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b bg-gray-50">
           <h2 className="text-lg font-semibold">简历管理</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
             <X size={20} />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b">
-          <button
-            onClick={() => setActiveTab('upload')}
-            className={`px-4 py-2 font-medium ${activeTab === 'upload' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
-          >
-            上传
-          </button>
-          <button
-            onClick={() => setActiveTab('review')}
-            className={`px-4 py-2 font-medium ${activeTab === 'review' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
-            disabled={!structured}
-          >
-            审阅
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'upload' && (
-            <UploadTab
-              state={uploadState}
-              error={errorMessage}
-              isDragging={isDragging}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onFileSelect={handleFileSelect}
-              retryText={retryText}
-              onRetryTextChange={setRetryText}
-              onTextRetry={handleTextRetry}
-            />
-          )}
-
-          {activeTab === 'review' && structured && (
-            <ReviewTab structured={structured} onStructuredChange={setStructured} />
-          )}
-        </div>
-
-        {/* Footer */}
-        {activeTab === 'review' && structured && (
-          <div className="border-t p-4 flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-50">
-              取消
-            </button>
+        {/* Main Content Area */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left Sidebar */}
+          <div className="w-64 border-r bg-gray-50 flex flex-col">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {localResumes.map((resume) => (
+                <div
+                  key={resume.id}
+                  onMouseEnter={() => setHoveredId(resume.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  onClick={() => handleSelectResume(resume.id)}
+                  className={`p-3 rounded cursor-pointer flex items-center justify-between transition ${
+                    localActiveId === resume.id
+                      ? 'bg-blue-100 border border-blue-300'
+                      : 'hover:bg-gray-200'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    {editingId === resume.id ? (
+                      <input
+                        autoFocus
+                        value={editingLabel}
+                        onChange={(e) => setEditingLabel(e.target.value)}
+                        onBlur={() => handleSaveLabel(resume.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveLabel(resume.id);
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <p className="text-sm font-medium truncate">{resume.label}</p>
+                    )}
+                  </div>
+                  {hoveredId === resume.id && !editingId && (
+                    <div className="flex gap-1 ml-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(resume.id);
+                        }}
+                        className="p-1 hover:bg-blue-200 rounded"
+                        title="重命名"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteResume(resume.id);
+                        }}
+                        className="p-1 hover:bg-red-200 rounded text-red-600"
+                        title="删除"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
             <button
-              onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              onClick={handleAddNew}
+              className="m-3 p-2 bg-blue-600 text-white rounded flex items-center justify-center gap-2 hover:bg-blue-700 transition text-sm font-medium"
             >
-              保存
+              <Plus size={16} /> 新增简历
             </button>
           </div>
-        )}
+
+          {/* Right Content */}
+          <div className="flex-1 flex flex-col">
+            {/* Tabs */}
+            <div className="flex border-b bg-white">
+              <button
+                onClick={() => setActiveTab('upload')}
+                className={`px-4 py-2 font-medium ${activeTab === 'upload' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
+              >
+                上传
+              </button>
+              <button
+                onClick={() => setActiveTab('review')}
+                className={`px-4 py-2 font-medium ${activeTab === 'review' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
+                disabled={!structured}
+              >
+                审阅
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {activeTab === 'upload' && (
+                <UploadTab
+                  state={uploadState}
+                  error={errorMessage}
+                  isDragging={isDragging}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onFileSelect={handleFileSelect}
+                  retryText={retryText}
+                  onRetryTextChange={setRetryText}
+                  onTextRetry={handleTextRetry}
+                />
+              )}
+
+              {activeTab === 'review' && structured && (
+                <ReviewTab structured={structured} onStructuredChange={setStructured} />
+              )}
+            </div>
+
+            {/* Footer */}
+            {activeTab === 'review' && structured && (
+              <div className="border-t p-4 bg-gray-50 flex justify-end gap-2">
+                <button onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100">
+                  取消
+                </button>
+                <button
+                  onClick={
+                    localActiveId && localResumes.find((r) => r.id === localActiveId)
+                      ? handleApplyChanges
+                      : handleSaveNewResume
+                  }
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  {localActiveId && localResumes.find((r) => r.id === localActiveId)
+                    ? '更新'
+                    : '添加'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
