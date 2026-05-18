@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type DragEvent, type ChangeEvent } from 'react';
 import { X, Plus, Trash2, Edit2, Download } from 'lucide-react';
 import type { UserContext, ResumeProfile, ResumeStructured } from '../../types';
 import { parseResumeFile, parseResumeText } from '../../services/resumeParser';
@@ -21,11 +21,17 @@ interface ResumeModalProps {
 }
 
 export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('upload');
-  const [uploadState, setUploadState] = useState<UploadState>('idle');
+  const initialActive = ctx.activeResumeId
+    ? ctx.resumes.find((r) => r.id === ctx.activeResumeId)
+    : undefined;
+
+  const [activeTab, setActiveTab] = useState<TabType>(initialActive ? 'review' : 'upload');
+  const [uploadState, setUploadState] = useState<UploadState>(initialActive ? 'success' : 'idle');
   const [errorMessage, setErrorMessage] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [structured, setStructured] = useState<ResumeStructured | null>(null);
+  const [fileName, setFileName] = useState(initialActive?.label ?? '');
+  const [structured, setStructured] = useState<ResumeStructured | null>(
+    initialActive?.structured ?? null,
+  );
   const [retryText, setRetryText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -34,7 +40,7 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
   const [localResumes, setLocalResumes] = useState<ResumeProfile[]>(ctx.resumes);
   const [localActiveId, setLocalActiveId] = useState(ctx.activeResumeId);
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
   };
@@ -43,13 +49,31 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       handleFileSelect(files[0]);
     }
+  };
+
+  const commitParsedResume = (data: ResumeStructured, label: string) => {
+    const newResume: ResumeProfile = {
+      id: `resume-${generateResumeId()}`,
+      label: label || `简历 ${localResumes.length + 1}`,
+      structured: data,
+      piiPolicy: 'keep',
+      createdAt: new Date().toISOString(),
+    };
+    const updatedResumes = [...localResumes, newResume];
+    setLocalResumes(updatedResumes);
+    setLocalActiveId(newResume.id);
+    setStructured(data);
+    setFileName(newResume.label);
+    setUploadState('success');
+    setActiveTab('review');
+    onSave({ ...ctx, resumes: updatedResumes, activeResumeId: newResume.id });
   };
 
   const handleFileSelect = async (file: File) => {
@@ -60,10 +84,8 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     const result = await parseResumeFile(file);
 
     if (result.status === 'ok') {
-      setStructured(result.data);
+      commitParsedResume(result.data, file.name);
       setRetryText('');
-      setUploadState('success');
-      setActiveTab('review');
     } else {
       setUploadState('error');
       setErrorMessage(result.message);
@@ -83,10 +105,8 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     const result = await parseResumeText(retryText);
 
     if (result.status === 'ok') {
-      setStructured(result.data);
+      commitParsedResume(result.data, `简历 ${localResumes.length + 1}`);
       setErrorMessage('');
-      setUploadState('success');
-      setActiveTab('review');
     } else {
       setUploadState('error');
       setErrorMessage(`文本解析失败：${result.message}`);
@@ -140,27 +160,6 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     onSave({ ...ctx, resumes: updatedResumes, activeResumeId: newActiveId });
   };
 
-  const handleSaveNewResume = () => {
-    if (!structured) return;
-
-    const newResume: ResumeProfile = {
-      id: `resume-${generateResumeId()}`,
-      label: fileName || `简历 ${localResumes.length + 1}`,
-      structured,
-      piiPolicy: 'keep',
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedResumes = [...localResumes, newResume];
-
-    onSave({
-      ...ctx,
-      resumes: updatedResumes,
-      activeResumeId: newResume.id,
-    });
-    onClose();
-  };
-
   const handleAddNew = () => {
     setLocalActiveId(undefined);
     setActiveTab('upload');
@@ -186,9 +185,7 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
   const handleApplyChanges = () => {
     let updatedResumes = localResumes;
     if (localActiveId && structured) {
-      updatedResumes = localResumes.map((r) =>
-        r.id === localActiveId ? { ...r, structured } : r,
-      );
+      updatedResumes = localResumes.map((r) => (r.id === localActiveId ? { ...r, structured } : r));
     }
     const newCtx: UserContext = {
       ...ctx,
@@ -362,19 +359,13 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
             {activeTab === 'review' && structured && (
               <div className="border-t p-4 bg-gray-50 flex justify-end gap-2">
                 <button onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100">
-                  取消
+                  关闭
                 </button>
                 <button
-                  onClick={
-                    localActiveId && localResumes.find((r) => r.id === localActiveId)
-                      ? handleApplyChanges
-                      : handleSaveNewResume
-                  }
+                  onClick={handleApplyChanges}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  {localActiveId && localResumes.find((r) => r.id === localActiveId)
-                    ? '更新'
-                    : '添加'}
+                  保存修改
                 </button>
               </div>
             )}
@@ -389,9 +380,9 @@ interface UploadTabProps {
   state: UploadState;
   error: string;
   isDragging: boolean;
-  onDragOver: (e: React.DragEvent) => void;
+  onDragOver: (e: DragEvent) => void;
   onDragLeave: () => void;
-  onDrop: (e: React.DragEvent) => void;
+  onDrop: (e: DragEvent) => void;
   onFileSelect: (file: File) => void;
   retryText: string;
   onRetryTextChange: (text: string) => void;

@@ -18,7 +18,7 @@ const fullLegacy: LegacyProfile = {
   resumeContent: '王阿棠 ｜ CS @ 某大学 2026 届',
 };
 
-const v1Context: UserContext = {
+const v1Context = {
   ...DEFAULT_USER_CONTEXT,
   resumes: [
     {
@@ -154,7 +154,7 @@ describe('loadUserContext', () => {
     expect(ctx.preferences.jobPreferences).toBe(fullLegacy.preferences);
     expect(ctx.resumes).toHaveLength(1);
     expect(ctx.resumes[0].id).toBe('resume-legacy');
-    expect((ctx.resumes[0] as any).content).toBe(fullLegacy.resumeContent);
+    expect(ctx.resumes[0].rawText).toBe(fullLegacy.resumeContent);
     expect(ctx.activeResumeId).toBe('resume-legacy');
   });
 
