@@ -92,11 +92,33 @@ const defineResumeSchema = () => ({
   required: ['basic', 'education', 'experience', 'skills', 'projects'],
 });
 
+function isValidResumeStructured(obj: unknown): obj is ResumeStructured {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  if (!o.basic || typeof o.basic !== 'object') return false;
+  if (!Array.isArray(o.education)) return false;
+  if (!Array.isArray(o.experience)) return false;
+  if (!o.skills || typeof o.skills !== 'object') return false;
+  const s = o.skills as Record<string, unknown>;
+  if (
+    !Array.isArray(s.hard) ||
+    !Array.isArray(s.soft) ||
+    !Array.isArray(s.languages) ||
+    !Array.isArray(s.tools)
+  ) {
+    return false;
+  }
+  if (!Array.isArray(o.projects)) return false;
+  return true;
+}
+
 const safeParse = (text: string | undefined): ResumeStructured | null => {
   if (!text) return null;
   try {
     const cleanText = text.replace(/```json|```/g, '').trim();
-    return JSON.parse(cleanText) as ResumeStructured;
+    const parsed = JSON.parse(cleanText);
+    if (!isValidResumeStructured(parsed)) return null;
+    return parsed;
   } catch {
     return null;
   }

@@ -103,11 +103,16 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
 
   const handleSaveLabel = (resumeId: string) => {
     if (!editingLabel.trim()) return;
+    const trimmed = editingLabel.trim();
     const updatedResumes = localResumes.map((r) =>
-      r.id === resumeId ? { ...r, label: editingLabel } : r,
+      r.id === resumeId ? { ...r, label: trimmed } : r,
     );
     setLocalResumes(updatedResumes);
     setEditingId(null);
+    if (resumeId === localActiveId) {
+      setFileName(trimmed);
+    }
+    onSave({ ...ctx, resumes: updatedResumes, activeResumeId: localActiveId });
   };
 
   const handleDeleteResume = (resumeId: string) => {
@@ -131,6 +136,8 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
         setFileName(activeResume.label);
       }
     }
+
+    onSave({ ...ctx, resumes: updatedResumes, activeResumeId: newActiveId });
   };
 
   const handleSaveNewResume = () => {
@@ -138,26 +145,24 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
 
     const newResume: ResumeProfile = {
       id: `resume-${generateResumeId()}`,
-      label: fileName || '简历 1',
+      label: fileName || `简历 ${localResumes.length + 1}`,
       structured,
       piiPolicy: 'keep',
       createdAt: new Date().toISOString(),
     };
 
     const updatedResumes = [...localResumes, newResume];
-    setLocalResumes(updatedResumes);
-    setLocalActiveId(newResume.id);
 
-    // Reset upload form
-    setActiveTab('upload');
-    setUploadState('idle');
-    setErrorMessage('');
-    setFileName('');
-    setStructured(null);
-    setRetryText('');
+    onSave({
+      ...ctx,
+      resumes: updatedResumes,
+      activeResumeId: newResume.id,
+    });
+    onClose();
   };
 
   const handleAddNew = () => {
+    setLocalActiveId(undefined);
     setActiveTab('upload');
     setUploadState('idle');
     setErrorMessage('');
@@ -175,13 +180,14 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
       setActiveTab('review');
       setUploadState('success');
     }
+    onSave({ ...ctx, resumes: localResumes, activeResumeId: resumeId });
   };
 
   const handleApplyChanges = () => {
     let updatedResumes = localResumes;
     if (localActiveId && structured) {
       updatedResumes = localResumes.map((r) =>
-        r.id === localActiveId ? { ...r, structured, label: fileName || r.label } : r,
+        r.id === localActiveId ? { ...r, structured } : r,
       );
     }
     const newCtx: UserContext = {

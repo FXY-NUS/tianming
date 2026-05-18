@@ -1,4 +1,62 @@
-import { UserContext } from './types';
+import { UserContext, PersonaInstance } from './types';
+import { mbtiPromptFragment } from './src/personas/plugins/mbti/index';
+import { hollandPromptFragment } from './src/personas/plugins/holland/index';
+import { big5PromptFragment } from './src/personas/plugins/big5/index';
+import { ziweiPromptFragment } from './src/personas/plugins/ziwei/index';
+import type { MbtiData } from './src/personas/plugins/mbti/schema';
+import type { HollandData } from './src/personas/plugins/holland/schema';
+import type { Big5Data } from './src/personas/plugins/big5/schema';
+import type { ZiweiData } from './src/personas/plugins/ziwei/schema';
+
+function renderPersona(p: PersonaInstance): string {
+  try {
+    switch (p.type) {
+      case 'mbti':
+        return mbtiPromptFragment(p.data as MbtiData);
+      case 'holland':
+        return hollandPromptFragment(p.data as HollandData);
+      case 'big5':
+        return big5PromptFragment(p.data as Big5Data);
+      case 'ziwei':
+        return ziweiPromptFragment(p.data as ZiweiData);
+      default:
+        return `## ${p.label}\n${JSON.stringify(p.data).slice(0, 200)}`;
+    }
+  } catch {
+    return '';
+  }
+}
+
+function buildActivePersonaSection(ctx: UserContext): string {
+  const active = ctx.personas.filter((p) => ctx.activePersonaIds.includes(p.id));
+  if (active.length === 0) return '';
+  return '\n\n【激活 Persona 档案】：\n' + active.map(renderPersona).join('\n\n');
+}
+
+function buildActiveResumeSection(ctx: UserContext): string {
+  if (!ctx.activeResumeId) return '';
+  const resume = ctx.resumes.find((r) => r.id === ctx.activeResumeId);
+  if (!resume) return '';
+  const s = resume.structured;
+  const parts: string[] = [];
+  if (s.basic.name) parts.push(`姓名: ${s.basic.name}`);
+  if (s.education.length > 0)
+    parts.push(
+      `学历: ${s.education.map((e) => `${e.degree}@${e.school}(${e.major})`).join(', ')}`,
+    );
+  if (s.skills.hard.length > 0) parts.push(`硬技能: ${s.skills.hard.join(', ')}`);
+  if (s.skills.soft.length > 0) parts.push(`软技能: ${s.skills.soft.join(', ')}`);
+  if (s.skills.tools.length > 0) parts.push(`工具: ${s.skills.tools.join(', ')}`);
+  if (s.experience.length > 0)
+    parts.push(
+      `工作经历: ${s.experience.map((e) => `${e.title}@${e.company}(${e.period})`).join(', ')}`,
+    );
+  if (s.projects.length > 0)
+    parts.push(`项目: ${s.projects.map((p) => `${p.name}(${p.tech.join('/')})`).join(', ')}`);
+  if (s.summary) parts.push(`职业总结: ${s.summary}`);
+  if (parts.length === 0) return '';
+  return `\n\n【简历结构化数据 (${resume.label})】：\n${parts.map((p) => `- ${p}`).join('\n')}`;
+}
 
 export const FLASH_FILTER_PROMPT = (ctx: UserContext) => `
 你是一个极速筛选刽子手。
@@ -15,10 +73,10 @@ export const PRO_AUDIT_PROMPT = (ctx: UserContext) => `
 你是一位精通《文墨天机紫微斗数》、《周易六爻》、《子平八字》与现代数据科学职业规划的资深职业审计师。
 风格：绝对客观、冷酷、数据导向、风险厌恶。没有情感滤镜。
 
-【命主档案 (${ctx.preferences.displayName})】：
-- 现实背景: ${ctx.preferences.backgroundSummary}
-- 命理底色: ${ctx.preferences.astrologyProfile}
-- 择业偏好: ${ctx.preferences.jobPreferences}
+【命主档案 (${ctx.preferences.displayName || '匿名'})】：
+- 现实背景: ${ctx.preferences.backgroundSummary || '（未填写）'}
+- 命理底色: ${ctx.preferences.astrologyProfile || '（未填写）'}
+- 择业偏好: ${ctx.preferences.jobPreferences || '（未填写）'}${buildActivePersonaSection(ctx)}${buildActiveResumeSection(ctx)}
 
 【审计维度】：
 A. 行业与职能 (30分): IT/AI/Web3/管理岗(+30); 纯行政/搬砖(0)。
