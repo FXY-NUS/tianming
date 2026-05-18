@@ -75,11 +75,26 @@ function normalizePreferences(p: unknown): UserContext['preferences'] {
   const stringArr = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const salaryRange =
+    Array.isArray(obj.salaryRange) &&
+    obj.salaryRange.length === 2 &&
+    obj.salaryRange.every((v) => typeof v === 'number')
+      ? ([obj.salaryRange[0], obj.salaryRange[1]] as [number, number])
+      : undefined;
+  const workMode =
+    obj.workMode === 'remote' ||
+    obj.workMode === 'onsite' ||
+    obj.workMode === 'hybrid' ||
+    obj.workMode === 'any'
+      ? obj.workMode
+      : undefined;
   return {
     displayName: str(obj.displayName),
     backgroundSummary: str(obj.backgroundSummary),
     astrologyProfile: str(obj.astrologyProfile),
     jobPreferences: str(obj.jobPreferences),
+    salaryRange,
+    workMode,
     preferredLocations: stringArr(obj.preferredLocations),
     avoidKeywords: stringArr(obj.avoidKeywords),
   };

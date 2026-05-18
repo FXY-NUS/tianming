@@ -1,0 +1,134 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Job, UserContext } from '../types';
+import { extractJobEvidence, safeParseEvidence } from './jobEvidenceExtractor';
+
+const mockGenerateContent = vi.fn();
+
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: vi.fn(function () {
+    return {
+      models: {
+        generateContent: mockGenerateContent,
+      },
+    };
+  }),
+  Type: {
+    OBJECT: 'object',
+    ARRAY: 'array',
+    STRING: 'string',
+    NUMBER: 'number',
+  },
+}));
+
+const ctx: UserContext = {
+  personas: [],
+  resumes: [],
+  preferences: {
+    displayName: '',
+    backgroundSummary: 'NUS DSML student with Python and SQL',
+    astrologyProfile: '',
+    jobPreferences: '',
+    preferredLocations: [],
+    avoidKeywords: [],
+  },
+  activePersonaIds: [],
+};
+
+const job: Job = {
+  id: 'job-1',
+  title: 'Data Analyst',
+  company: 'Acme',
+  url: '',
+  content: 'Python, SQL, dashboards. AWS preferred.',
+  salary_text: '',
+  status: 'New',
+  importedAt: '2026-05-18T00:00:00Z',
+  tags: [],
+  chatHistory: [],
+};
+
+const evidence = {
+  matchedSkills: [
+    { skill: 'Python', priority: 'must', evidence: 'JD asks for Python' },
+    { skill: 'SQL', priority: 'must' },
+  ],
+  missingSkills: [{ skill: 'AWS', priority: 'preferred' }],
+  transferableSkills: [{ skill: 'R', priority: 'preferred' }],
+  cultureSignals: ['Structured analytics team'],
+  cultureScore: 70,
+  growthReasons: ['Good early-career analytics scope'],
+  growthScore: 82,
+};
+
+describe('jobEvidenceExtractor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    localStorage.setItem('GEMINI_API_KEY', 'test-key');
+  });
+
+  it('parses valid evidence JSON', async () => {
+    mockGenerateContent.mockResolvedValue({ text: JSON.stringify(evidence) });
+
+    const result = await extractJobEvidence(job, ctx);
+
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.data.matchedSkills).toHaveLength(2);
+      expect(result.data.growthScore).toBe(82);
+    }
+  });
+
+  it('strips markdown code fences from JSON before validation', () => {
+    const parsed = safeParseEvidence(`\`\`\`json\n${JSON.stringify(evidence)}\n\`\`\``);
+
+    expect(parsed?.matchedSkills[0].skill).toBe('Python');
+  });
+
+  it('rejects malformed JSON responses as schema violations', async () => {
+    mockGenerateContent.mockResolvedValue({ text: '{ invalid json }' });
+
+    const result = await extractJobEvidence(job, ctx);
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.kind).toBe('schema_violation');
+    }
+  });
+
+  it('classifies empty Gemini responses separately', async () => {
+    mockGenerateContent.mockResolvedValue({ text: '' });
+
+    const result = await extractJobEvidence(job, ctx);
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.kind).toBe('empty_response');
+    }
+  });
+
+  it('rejects missing required arrays', async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: JSON.stringify({ matchedSkills: [], missingSkills: [] }),
+    });
+
+    const result = await extractJobEvidence(job, ctx);
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.kind).toBe('schema_violation');
+    }
+  });
+
+  it('handles Gemini errors without throwing', async () => {
+    mockGenerateContent.mockRejectedValue(new Error('quota exceeded'));
+
+    const result = await extractJobEvidence(job, ctx);
+
+    expect(result.status).toBe('error');
+    if (result.status === 'error') {
+      expect(result.kind).toBe('gemini_error');
+      expect(result.message).toContain('quota');
+    }
+  });
+});

@@ -38,6 +38,8 @@ export interface UserPreferences {
   backgroundSummary: string; // education, skills, background
   astrologyProfile: string; // 命理 + 流年
   jobPreferences: string; // salary, direction, avoidance (freeform)
+  salaryRange?: [number, number];
+  workMode?: 'remote' | 'onsite' | 'hybrid' | 'any';
   preferredLocations: string[];
   avoidKeywords: string[];
 }
