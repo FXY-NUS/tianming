@@ -38,6 +38,7 @@ import {
   sendMessageToJobConsultant,
 } from './services/geminiService';
 import { loadUserContext, saveUserContext } from './services/userContextStorage';
+import { ResumeModal } from './src/components/ResumeModal';
 
 const LOCAL_STORAGE_KEY_JOBS = 'career_navigator_jobs_v10';
 const LOCAL_STORAGE_KEY_USAGE = 'career_navigator_usage_v4';
@@ -46,6 +47,7 @@ const App = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [userCtx, setUserCtx] = useState<UserContext>(() => loadUserContext());
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showResumeModal, setShowResumeModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   const [filter, setFilter] = useState('');
@@ -756,6 +758,12 @@ const App = () => {
               </h3>
               <div className="flex gap-2">
                 <button
+                  onClick={() => setShowResumeModal(true)}
+                  className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors flex items-center gap-2 text-xs font-bold shadow-sm"
+                >
+                  <Upload size={16} /> 管理简历
+                </button>
+                <button
                   onClick={handleSelectKey}
                   className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-2 text-xs font-bold shadow-sm"
                 >
@@ -824,6 +832,18 @@ const App = () => {
           </div>
         </div>
       )}
+
+      {/* Resume Modal */}
+      <ResumeModal
+        isOpen={showResumeModal}
+        onClose={() => setShowResumeModal(false)}
+        ctx={userCtx}
+        onSave={(newCtx) => {
+          setUserCtx(newCtx);
+          saveUserContext(newCtx);
+          setShowResumeModal(false);
+        }}
+      />
     </div>
   );
 };

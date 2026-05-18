@@ -47,3 +47,44 @@ E. 命理加权 (10分): 坐标正东/东南/正南(深港); 审美文化属性�
 export const CHAT_SYSTEM_PROMPT = (jobTitle: string, company: string, ctx: UserContext) => `
 你现在是 [${jobTitle}] 的 AI 职业顾问。基于命主背景(${ctx.preferences.backgroundSummary})回答，保持简练犀利。
 `;
+
+export const RESUME_PARSE_PROMPT = `
+你是一个精准的简历解析引擎。从用户上传的简历（PDF / 图片 / DOCX / 纯文本）中提取结构化信息。
+
+【提取规则】：
+1. 基本信息(basic)：姓名、邮箱、电话、城市
+2. 教育(education)：学校、学位、专业、GPA、入学-毕业年份
+3. 工作经历(experience)：公司、职位、任期、工作亮点(子弹点)
+4. 技能(skills)：硬技能、软技能、语言、工具和平台
+5. 项目(projects)：项目名称、个人角色、亮点、技术栈
+6. 可选(summary/certifications/rawHighlights)：职业总结、证书、其他亮点
+
+【输出 JSON 格式】：
+{
+  "basic": { "name": "", "email": "", "phone": "", "location": "" },
+  "summary": "",
+  "education": [
+    { "school": "", "degree": "", "major": "", "gpa": "", "years": "2020-2024" }
+  ],
+  "experience": [
+    { "company": "", "title": "", "period": "2023-2024", "bullets": [""] }
+  ],
+  "skills": {
+    "hard": [""],
+    "soft": [""],
+    "languages": [""],
+    "tools": [""]
+  },
+  "projects": [
+    { "name": "", "role": "", "bullets": [""], "tech": [""] }
+  ],
+  "certifications": [""],
+  "rawHighlights": [""]
+}
+
+【重要】：
+- 如果字段无内容，返回空字符串或空数组（不要 null）
+- 时间跨度(years/period)用 "YYYY-YYYY" 或 "YYYY-MM" 格式
+- 子弹点(bullets)保留原文核心内容，勿做总结删减
+- 不要猜测；缺失字段就留空，不填编造内容
+`;
