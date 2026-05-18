@@ -31,7 +31,7 @@ import {
   Key,
   RefreshCcw,
 } from 'lucide-react';
-import { Job, UserContext } from './types';
+import { Job, UserContext, UserPreferences } from './types';
 import {
   batchScreenJobs,
   deepAuditJob,
@@ -39,9 +39,33 @@ import {
 } from './services/geminiService';
 import { loadUserContext, saveUserContext } from './services/userContextStorage';
 import { ResumeModal } from './src/components/ResumeModal';
+import { PersonaSection } from './src/components/PersonaSection';
 
 const LOCAL_STORAGE_KEY_JOBS = 'career_navigator_jobs_v10';
 const LOCAL_STORAGE_KEY_USAGE = 'career_navigator_usage_v4';
+
+type ProfileTab = 'profile' | 'personas';
+
+const splitListInput = (value: string): string[] =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const joinListInput = (value: string[]): string => value.join(', ');
+
+const getJobScore = (job: Job): number | undefined =>
+  job.analysis?.matchScore?.overall ??
+  job.matchScore?.overall ??
+  job.analysis?.score ??
+  job.flashScore;
+
+const scorePillClass = (score: number | undefined): string => {
+  if (score === undefined) return 'bg-slate-200 text-slate-500';
+  if (score >= 80) return 'bg-emerald-500 text-white';
+  if (score < 40) return 'bg-slate-200 text-slate-500';
+  return 'bg-indigo-600 text-white';
+};
 
 const App = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -150,6 +174,8 @@ const App = () => {
               ...updated[index],
               flashScore: res.score,
               flashMatchReason: res.reason,
+              matchScore: res.matchScore,
+              extractedEvidence: res.extractedEvidence,
               status: 'Screened',
             };
           }
@@ -168,9 +194,12 @@ const App = () => {
     try {
       const analysis = await deepAuditJob(job, userCtx);
       trackUsage('pro');
+      const score = analysis.matchScore?.overall ?? analysis.score;
       const updates = {
         analysis,
-        status: (analysis.score >= 80 ? 'High Match' : 'Screened') as Job['status'],
+        matchScore: analysis.matchScore,
+        extractedEvidence: analysis.extractedEvidence,
+        status: (score >= 80 ? 'High Match' : 'Screened') as Job['status'],
       };
       updateJobData(job.id, updates);
     } catch (e) {
@@ -296,20 +325,50 @@ const App = () => {
         return matchT && matchS;
       })
       .sort((a, b) => {
-        if (sortBy === 'Score')
-          return (
-            (b.analysis?.score || b.flashScore || 0) - (a.analysis?.score || a.flashScore || 0)
-          );
+        if (sortBy === 'Score') return (getJobScore(b) ?? 0) - (getJobScore(a) ?? 0);
         return new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime();
       });
   }, [jobs, filter, statusFilter, sortBy]);
 
   // Local edit state for profile modal
-  const [editPrefs, setEditPrefs] = useState(userCtx.preferences);
+  const [editCtx, setEditCtx] = useState<UserContext>(userCtx);
+  const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
   const openProfileModal = () => {
-    setEditPrefs(userCtx.preferences);
+    setEditCtx(userCtx);
+    setProfileTab('profile');
     setShowProfileModal(true);
   };
+
+  const updateEditPrefs = (updates: Partial<UserPreferences>) => {
+    setEditCtx((prev) => ({
+      ...prev,
+      preferences: { ...prev.preferences, ...updates },
+    }));
+  };
+
+  const updateSalaryRange = (bound: 'min' | 'max', rawValue: string) => {
+    const value = rawValue === '' ? undefined : Number(rawValue);
+    setEditCtx((prev) => {
+      if (value === undefined || !Number.isFinite(value)) {
+        return {
+          ...prev,
+          preferences: { ...prev.preferences, salaryRange: undefined },
+        };
+      }
+
+      const current = prev.preferences.salaryRange;
+      const min = bound === 'min' ? value : (current?.[0] ?? value);
+      const max = bound === 'max' ? value : (current?.[1] ?? value);
+      const salaryRange: [number, number] = [Math.min(min, max), Math.max(min, max)];
+
+      return {
+        ...prev,
+        preferences: { ...prev.preferences, salaryRange },
+      };
+    });
+  };
+
+  const selectedMatchScore = selectedJob?.analysis?.matchScore ?? selectedJob?.matchScore;
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
@@ -418,57 +477,60 @@ const App = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 no-scrollbar">
-          {processedJobs.map((job) => (
-            <div
-              key={job.id}
-              onClick={() => setSelectedJob(job)}
-              className={`p-4 cursor-pointer hover:bg-slate-50 transition-all border-l-[6px] relative group ${selectedJob?.id === job.id ? 'bg-indigo-50 border-l-indigo-600 shadow-inner' : 'border-l-transparent'}`}
-            >
-              <div className="flex justify-between items-start gap-2 mb-1">
-                <h3
-                  className={`font-bold text-[13px] leading-tight line-clamp-2 ${selectedJob?.id === job.id ? 'text-indigo-950' : 'text-slate-800'}`}
-                >
-                  {job.title}
-                </h3>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Star
-                    onClick={(e) => toggleFavorite(job.id, e)}
-                    size={16}
-                    className={`transition-colors ${job.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200 group-hover:text-slate-300'}`}
+          {processedJobs.map((job) => {
+            const displayScore = getJobScore(job);
+            return (
+              <div
+                key={job.id}
+                onClick={() => setSelectedJob(job)}
+                className={`p-4 cursor-pointer hover:bg-slate-50 transition-all border-l-[6px] relative group ${selectedJob?.id === job.id ? 'bg-indigo-50 border-l-indigo-600 shadow-inner' : 'border-l-transparent'}`}
+              >
+                <div className="flex justify-between items-start gap-2 mb-1">
+                  <h3
+                    className={`font-bold text-[13px] leading-tight line-clamp-2 ${selectedJob?.id === job.id ? 'text-indigo-950' : 'text-slate-800'}`}
+                  >
+                    {job.title}
+                  </h3>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Star
+                      onClick={(e) => toggleFavorite(job.id, e)}
+                      size={16}
+                      className={`transition-colors ${job.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200 group-hover:text-slate-300'}`}
+                    />
+                    {displayScore !== undefined && (
+                      <span
+                        className={`text-[10px] font-black px-1.5 py-0.5 rounded ${scorePillClass(displayScore)}`}
+                      >
+                        {displayScore}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium mb-2">{job.company}</div>
+                {job.flashMatchReason && (
+                  <div
+                    className={`text-[10px] p-2 rounded-lg line-clamp-2 italic ${(displayScore ?? 100) < 40 ? 'bg-slate-200/50 text-slate-400' : 'bg-white/50 border border-indigo-100 text-indigo-700'}`}
+                  >
+                    "{job.flashMatchReason}"
+                  </div>
+                )}
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-[9px] text-slate-400">
+                    {new Date(job.importedAt).toLocaleDateString()}
+                  </span>
+                  <Trash2
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+                      if (selectedJob?.id === job.id) setSelectedJob(null);
+                    }}
+                    size={14}
+                    className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                   />
-                  {(job.analysis?.score || job.flashScore !== undefined) && (
-                    <span
-                      className={`text-[10px] font-black px-1.5 py-0.5 rounded ${job.analysis?.score && job.analysis.score >= 80 ? 'bg-emerald-500 text-white' : job.flashScore && job.flashScore < 20 ? 'bg-slate-200 text-slate-500' : 'bg-indigo-600 text-white'}`}
-                    >
-                      {job.analysis?.score || job.flashScore}
-                    </span>
-                  )}
                 </div>
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mb-2">{job.company}</div>
-              {job.flashMatchReason && (
-                <div
-                  className={`text-[10px] p-2 rounded-lg line-clamp-2 italic ${job.flashScore && job.flashScore < 20 ? 'bg-slate-200/50 text-slate-400' : 'bg-white/50 border border-indigo-100 text-indigo-700'}`}
-                >
-                  "{job.flashMatchReason}"
-                </div>
-              )}
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-[9px] text-slate-400">
-                  {new Date(job.importedAt).toLocaleDateString()}
-                </span>
-                <Trash2
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setJobs((prev) => prev.filter((j) => j.id !== job.id));
-                    if (selectedJob?.id === job.id) setSelectedJob(null);
-                  }}
-                  size={14}
-                  className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -586,6 +648,45 @@ const App = () => {
                         </div>
                       </div>
                     </div>
+
+                    {selectedMatchScore && (
+                      <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <h4 className="text-slate-900 font-black text-xs uppercase tracking-widest flex items-center gap-2">
+                            <ListChecks size={18} /> Code Scoring Engine
+                          </h4>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">
+                            {selectedMatchScore.rubricVersion} / {selectedMatchScore.scoringVersion}
+                          </span>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {selectedMatchScore.dimensions.map((dimension) => (
+                            <div
+                              key={dimension.key}
+                              className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-xs font-black text-slate-700">
+                                  {dimension.label}
+                                </span>
+                                <span className="text-xs font-black text-indigo-600">
+                                  {dimension.score ?? 'unknown'}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                {dimension.confidence}
+                                {dimension.hardFail ? ' / hard fail' : ''}
+                              </div>
+                              {dimension.warnings[0] && (
+                                <div className="mt-2 text-xs font-medium text-amber-700">
+                                  {dimension.warnings[0]}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="bg-white p-8 rounded-[2rem] border-l-8 border-emerald-500 shadow-sm space-y-4">
@@ -753,7 +854,7 @@ const App = () => {
       {/* Profile Modal */}
       {showProfileModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-8 border-b flex justify-between items-center bg-slate-50">
               <h3 className="font-black text-2xl text-slate-900 flex items-center gap-3">
                 <User size={28} className="text-indigo-600" /> 命主核心档案
@@ -779,53 +880,143 @@ const App = () => {
                 </button>
               </div>
             </div>
-            <div className="p-10 overflow-y-auto space-y-8 no-scrollbar">
-              <div className="space-y-4">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                  命主姓名
-                </label>
-                <input
-                  value={editPrefs.displayName}
-                  onChange={(e) => setEditPrefs({ ...editPrefs, displayName: e.target.value })}
-                  className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
-                />
+            <div className="border-b bg-white px-8 pt-5">
+              <div className="inline-flex rounded-xl bg-slate-100 p-1">
+                {[
+                  { id: 'profile' as const, label: '基础档案' },
+                  { id: 'personas' as const, label: 'Persona' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setProfileTab(tab.id)}
+                    className={`rounded-lg px-4 py-2 text-xs font-black transition-all ${profileTab === tab.id ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-              <div className="space-y-4">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                  教育、硬核技能与现实背景
-                </label>
-                <textarea
-                  value={editPrefs.backgroundSummary}
-                  onChange={(e) =>
-                    setEditPrefs({ ...editPrefs, backgroundSummary: e.target.value })
-                  }
-                  className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all"
-                />
-              </div>
-              <div className="space-y-4">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                  命理特征与 2026 流年避讳
-                </label>
-                <textarea
-                  value={editPrefs.astrologyProfile}
-                  onChange={(e) => setEditPrefs({ ...editPrefs, astrologyProfile: e.target.value })}
-                  className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all"
-                />
-              </div>
-              <div className="space-y-4">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                  择业偏好与限制条件
-                </label>
-                <input
-                  value={editPrefs.jobPreferences}
-                  onChange={(e) => setEditPrefs({ ...editPrefs, jobPreferences: e.target.value })}
-                  className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
-                />
-              </div>
+            </div>
+            <div className="p-8 overflow-y-auto space-y-8 no-scrollbar">
+              {profileTab === 'profile' ? (
+                <>
+                  <div className="space-y-4">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      命主姓名
+                    </label>
+                    <input
+                      value={editCtx.preferences.displayName}
+                      onChange={(e) => updateEditPrefs({ displayName: e.target.value })}
+                      className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      教育、硬核技能与现实背景
+                    </label>
+                    <textarea
+                      value={editCtx.preferences.backgroundSummary}
+                      onChange={(e) => updateEditPrefs({ backgroundSummary: e.target.value })}
+                      className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      命理特征与 2026 流年避讳
+                    </label>
+                    <textarea
+                      value={editCtx.preferences.astrologyProfile}
+                      onChange={(e) => updateEditPrefs({ astrologyProfile: e.target.value })}
+                      className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-32 focus:border-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      择业偏好与限制条件
+                    </label>
+                    <input
+                      value={editCtx.preferences.jobPreferences}
+                      onChange={(e) => updateEditPrefs({ jobPreferences: e.target.value })}
+                      className="w-full border-2 border-slate-100 p-5 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        期望薪资下限
+                      </label>
+                      <input
+                        type="number"
+                        value={editCtx.preferences.salaryRange?.[0] ?? ''}
+                        onChange={(e) => updateSalaryRange('min', e.target.value)}
+                        className="w-full border-2 border-slate-100 p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        期望薪资上限
+                      </label>
+                      <input
+                        type="number"
+                        value={editCtx.preferences.salaryRange?.[1] ?? ''}
+                        onChange={(e) => updateSalaryRange('max', e.target.value)}
+                        className="w-full border-2 border-slate-100 p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        工作模式
+                      </label>
+                      <select
+                        value={editCtx.preferences.workMode ?? 'any'}
+                        onChange={(e) =>
+                          updateEditPrefs({
+                            workMode: e.target.value as UserPreferences['workMode'],
+                          })
+                        }
+                        className="w-full border-2 border-slate-100 bg-white p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                      >
+                        <option value="any">Any</option>
+                        <option value="remote">Remote</option>
+                        <option value="hybrid">Hybrid</option>
+                        <option value="onsite">Onsite</option>
+                      </select>
+                    </div>
+                    <div className="space-y-4">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        偏好地点
+                      </label>
+                      <input
+                        value={joinListInput(editCtx.preferences.preferredLocations)}
+                        onChange={(e) =>
+                          updateEditPrefs({ preferredLocations: splitListInput(e.target.value) })
+                        }
+                        className="w-full border-2 border-slate-100 p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      避开关键词
+                    </label>
+                    <input
+                      value={joinListInput(editCtx.preferences.avoidKeywords)}
+                      onChange={(e) =>
+                        updateEditPrefs({ avoidKeywords: splitListInput(e.target.value) })
+                      }
+                      className="w-full border-2 border-slate-100 p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                </>
+              ) : (
+                <PersonaSection ctx={editCtx} onChange={setEditCtx} />
+              )}
             </div>
             <div className="p-8 border-t bg-slate-50 flex justify-end">
               <button
-                onClick={() => saveProfileData({ ...userCtx, preferences: editPrefs })}
+                onClick={() => saveProfileData(editCtx)}
                 className="px-12 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all"
               >
                 保存档案并同步审计逻辑

@@ -263,6 +263,26 @@ describe('saveUserContext', () => {
     expect(loadUserContext()).toEqual(ctx);
   });
 
+  it('round-trips persona instances and active persona ids', () => {
+    const ctx: UserContext = {
+      ...DEFAULT_USER_CONTEXT,
+      personas: [
+        {
+          id: 'mbti-1',
+          type: 'mbti',
+          label: 'MBTI',
+          data: { type: 'INTJ' },
+          createdAt: '2026-05-18T00:00:00Z',
+        },
+      ],
+      activePersonaIds: ['mbti-1'],
+    };
+
+    saveUserContext(ctx);
+
+    expect(loadUserContext()).toEqual(ctx);
+  });
+
   it('saves to USER_CONTEXT_KEY (v2), not v1 key', () => {
     const ctx = DEFAULT_USER_CONTEXT;
     saveUserContext(ctx);

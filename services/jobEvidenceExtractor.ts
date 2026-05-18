@@ -90,6 +90,9 @@ function buildEvidencePrompt(job: Job, ctx: UserContext): string {
   const resumeText = activeResume
     ? JSON.stringify(activeResume.structured)
     : 'No active resume selected.';
+  const activePersonas = ctx.personas.filter((persona) =>
+    ctx.activePersonaIds.includes(persona.id),
+  );
 
   return `
 User profile:
@@ -97,6 +100,9 @@ ${JSON.stringify(ctx.preferences)}
 
 Active resume:
 ${resumeText}
+
+Active personas:
+${activePersonas.length > 0 ? JSON.stringify(activePersonas) : 'No active personas selected.'}
 
 Job:
 Title: ${job.title}
@@ -107,7 +113,7 @@ ${job.content}
 `;
 }
 
-function defineEvidenceSchema() {
+export function defineEvidenceSchema() {
   const skillEvidence = {
     type: Type.OBJECT,
     properties: {
