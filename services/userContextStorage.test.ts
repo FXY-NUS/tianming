@@ -78,9 +78,29 @@ describe('loadUserContext', () => {
     });
     expect(ctx.resumes[0].piiPolicy).toBe('keep');
     expect(ctx.resumes[0].createdAt).toBe('2025-01-01T00:00:00Z');
-    // oldField updatedAt is dropped, rawText/rawFileRef are undefined
+    // updatedAt is dropped; rawText preserves v1 plain-text content so no data loss
     expect((ctx.resumes[0] as any).updatedAt).toBeUndefined();
-    expect((ctx.resumes[0] as any).rawText).toBeUndefined();
+    expect(ctx.resumes[0].rawText).toBe('计算机科学与技术相关经历');
+  });
+
+  it('migrates v1 resume with empty content to rawText undefined', () => {
+    const v1Empty: UserContext = {
+      ...DEFAULT_USER_CONTEXT,
+      resumes: [
+        {
+          id: 'resume-blank',
+          name: '空白版',
+          content: '',
+          createdAt: '2025-01-01T00:00:00Z',
+        } as any,
+      ],
+      activeResumeId: 'resume-blank',
+      activePersonaIds: [],
+    };
+    localStorage.setItem(USER_CONTEXT_V1_KEY, JSON.stringify(v1Empty));
+
+    const ctx = loadUserContext();
+    expect(ctx.resumes[0].rawText).toBeUndefined();
   });
 
   it('migrates v1 and persists to v2 key so next load is fast', () => {

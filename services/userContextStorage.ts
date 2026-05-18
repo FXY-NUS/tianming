@@ -71,7 +71,9 @@ function migrateFromV1(raw: string): UserContext {
   const newResumes = v1.resumes.map((old) => ({
     id: old.id,
     label: old.name,
-    rawText: undefined,
+    // Preserve v1 plain-text content as rawText so users don't lose data;
+    // new Phase 3 uploads still leave rawText undefined per Q1=B.
+    rawText: old.content || undefined,
     rawFileRef: undefined,
     structured: {
       basic: {},

@@ -6,6 +6,13 @@ import { parseResumeFile, parseResumeText } from '../../services/resumeParser';
 type TabType = 'upload' | 'review' | 'settings';
 type UploadState = 'idle' | 'loading' | 'error' | 'success';
 
+const generateResumeId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
 interface ResumeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -130,7 +137,7 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     if (!structured) return;
 
     const newResume: ResumeProfile = {
-      id: `resume-${crypto.randomUUID()}`,
+      id: `resume-${generateResumeId()}`,
       label: fileName || '简历 1',
       structured,
       piiPolicy: 'keep',
@@ -511,8 +518,8 @@ function ReviewTab({ structured, onStructuredChange }: ReviewTabProps) {
     const newProjects = [...structured.projects];
     newProjects[index] = { ...newProjects[index], [field]: value };
     onStructuredChange({ ...structured, projects: newProjects });
-  }; 
-  
+  };
+
   return (
     <div className="space-y-6">
       {/* Basic Info */}
@@ -727,18 +734,40 @@ function ReviewTab({ structured, onStructuredChange }: ReviewTabProps) {
           <div className="space-y-3">
             {structured.projects.map((proj, idx) => (
               <div key={idx} className="p-3 border rounded bg-gray-50 space-y-2">
-                <input
-                  type="text"
-                  value={proj.name}
-                  onChange={(e) => updateProject(idx, 'name', e.target.value)}
-                  placeholder="项目名"
-                  className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={proj.name}
+                    onChange={(e) => updateProject(idx, 'name', e.target.value)}
+                    placeholder="项目名"
+                    className="px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="text"
+                    value={proj.role}
+                    onChange={(e) => updateProject(idx, 'role', e.target.value)}
+                    placeholder="角色"
+                    className="px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
                 <textarea
                   value={proj.bullets.join('\n')}
                   onChange={(e) => updateProject(idx, 'bullets', e.target.value.split('\n'))}
                   placeholder="项目亮点(每行一条)"
                   className="w-full h-12 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="text"
+                  value={proj.tech.join(', ')}
+                  onChange={(e) =>
+                    updateProject(
+                      idx,
+                      'tech',
+                      e.target.value.split(',').map((s) => s.trim()),
+                    )
+                  }
+                  placeholder="技术栈 (逗号分隔)"
+                  className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             ))}
