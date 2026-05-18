@@ -42,7 +42,55 @@ export interface UserPreferences {
   avoidKeywords: string[];
 }
 
+export interface ResumeStructured {
+  basic: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    location?: string;
+  };
+  summary?: string;
+  education: Array<{
+    school: string;
+    degree: string;
+    major: string;
+    gpa?: string;
+    years: string;
+  }>;
+  experience: Array<{
+    company: string;
+    title: string;
+    period: string;
+    bullets: string[];
+  }>;
+  skills: {
+    hard: string[];
+    soft: string[];
+    languages: string[];
+    tools: string[];
+  };
+  projects: Array<{
+    name: string;
+    role: string;
+    bullets: string[];
+    tech: string[];
+  }>;
+  certifications?: string[];
+  rawHighlights?: string[];
+}
+
 export interface ResumeProfile {
+  id: string;
+  label: string;
+  rawText?: string;
+  rawFileRef?: { mime: string; blobId: string };
+  structured: ResumeStructured;
+  piiPolicy: 'keep' | 'mask' | 'strip';
+  createdAt: string;
+}
+
+/** Legacy V1 type kept only for migration reading — do not use in new code */
+export interface LegacyV1ResumeProfile {
   id: string;
   name: string;
   content: string;
