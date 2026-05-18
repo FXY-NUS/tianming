@@ -503,6 +503,16 @@ function ReviewTab({ structured, onStructuredChange }: ReviewTabProps) {
     });
   };
 
+  const updateProject = (
+    index: number,
+    field: keyof (typeof structured.projects)[0],
+    value: string | string[],
+  ) => {
+    const newProjects = [...structured.projects];
+    newProjects[index] = { ...newProjects[index], [field]: value };
+    onStructuredChange({ ...structured, projects: newProjects });
+  }; 
+  
   return (
     <div className="space-y-6">
       {/* Basic Info */}
@@ -719,12 +729,14 @@ function ReviewTab({ structured, onStructuredChange }: ReviewTabProps) {
               <div key={idx} className="p-3 border rounded bg-gray-50 space-y-2">
                 <input
                   type="text"
-                  defaultValue={proj.name}
+                  value={proj.name}
+                  onChange={(e) => updateProject(idx, 'name', e.target.value)}
                   placeholder="项目名"
                   className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <textarea
-                  defaultValue={proj.bullets.join('\n')}
+                  value={proj.bullets.join('\n')}
+                  onChange={(e) => updateProject(idx, 'bullets', e.target.value.split('\n'))}
                   placeholder="项目亮点(每行一条)"
                   className="w-full h-12 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
