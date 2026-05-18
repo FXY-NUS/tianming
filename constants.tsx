@@ -117,10 +117,8 @@ ${auditDims}
 
 【输出 JSON 格式】：
 {
-  "score": 0-100,
   "summary": "一针见血的结论",
   ${hexagramField}
-  "judgment": "【强烈推荐 / 谨慎尝试 / 立即放弃】",
   "detailed_analysis": {
     "pros": ${prosExample},
     "cons": ${consExample}
@@ -130,6 +128,8 @@ ${auditDims}
   "interview_tactics": "针对背景的面试必杀技",
   "contract_red_flags": "入职前必须确认的避坑条款"
 }${constraint}
+
+【评分边界】：不要输出 score 或最终 judgment。你只负责叙事与证据，最终分数和最终推荐等级由 Tianming 代码评分引擎生成。
 `;
 };
 

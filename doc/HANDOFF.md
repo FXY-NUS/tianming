@@ -3,6 +3,17 @@
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
 
+## 0.0 每次接手必读 SOP
+
+在继续任何开发前，先读并执行 `doc/agent-workflow.md`。
+
+关键规则：
+
+- GitHub PR merge 后，先把本地 `main` 快进同步到 `origin/main`，再从最新 `main` 开新分支。
+- 本 repo remote 使用 SSH；文档只记录 SSH 配置检查方法，绝不记录 SSH private key / API key / token。
+- Windows 下验证统一使用 `npm.cmd run test`、`npm.cmd run lint`、`npm.cmd run build`。
+- 如果用户说「GitHub 端 merge 过了」，助手应主动同步本地，不要求用户手动处理。
+
 ---
 
 ## 0. 角色 & 协作模式

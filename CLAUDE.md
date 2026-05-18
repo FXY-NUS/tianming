@@ -3,6 +3,20 @@
 > AI-powered career navigator combining LLM-driven job analysis
 > with multi-persona user profiling (MBTI / Holland / Big5).
 
+## 0. 每次接手必读
+
+新 session 开始时先读：
+
+1. `doc/agent-workflow.md`：GitHub / SSH / 本地同步 / Windows 命令 SOP。
+2. `doc/HANDOFF.md`：项目总交接和 Phase 路线。
+3. 当前 Phase notes，例如 Phase 4 期间读 `doc/scoring-rubric.md` 和 `doc/phase-4-notes.md`（如果存在）。
+
+关键提醒：
+
+- GitHub PR merge 后，下一轮先同步本地 `main`，再开新分支继续。
+- 远端使用 SSH，但不要把 SSH private key、API key、token 写入 repo 或文档。
+- Windows 下用 `npm.cmd run test/lint/build`。
+
 ## 一、项目背景
 
 天命（Tianming）是一个面向求职者的智能岗位匹配工具。核心能力：
