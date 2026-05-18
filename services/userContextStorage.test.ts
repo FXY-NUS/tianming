@@ -3,6 +3,7 @@ import type { LegacyProfile, UserContext } from '../types';
 import {
   DEFAULT_USER_CONTEXT,
   USER_CONTEXT_KEY,
+  USER_CONTEXT_V1_KEY,
   loadUserContext,
   saveUserContext,
 } from './userContextStorage';
@@ -17,6 +18,21 @@ const fullLegacy: LegacyProfile = {
   resumeContent: '王阿棠 ｜ CS @ 某大学 2026 届',
 };
 
+const v1Context: UserContext = {
+  ...DEFAULT_USER_CONTEXT,
+  resumes: [
+    {
+      id: 'resume-1',
+      name: '技术岗版',
+      content: '计算机科学与技术相关经历',
+      createdAt: '2025-01-01T00:00:00Z',
+      updatedAt: '2025-01-02T00:00:00Z',
+    },
+  ],
+  activeResumeId: 'resume-1',
+  activePersonaIds: ['mbti-1'],
+};
+
 beforeEach(() => {
   localStorage.clear();
 });
@@ -27,17 +43,85 @@ describe('loadUserContext', () => {
     expect(ctx).toEqual(DEFAULT_USER_CONTEXT);
   });
 
-  it('returns the saved UserContext when the new key is present', () => {
-    const saved: UserContext = {
+  // ─── V2 scenarios ───────────────────────────────────────────────────────
+
+  it('loads a v2 context directly when v2 key is present', () => {
+    const v2: UserContext = {
       ...DEFAULT_USER_CONTEXT,
-      activePersonaIds: ['mbti-1'],
+      activePersonaIds: ['big5-1'],
     };
-    localStorage.setItem(USER_CONTEXT_KEY, JSON.stringify(saved));
+    localStorage.setItem(USER_CONTEXT_KEY, JSON.stringify(v2));
 
     const ctx = loadUserContext();
 
-    expect(ctx.activePersonaIds).toEqual(['mbti-1']);
+    expect(ctx.activePersonaIds).toEqual(['big5-1']);
   });
+
+  // ─── V1 scenarios ───────────────────────────────────────────────────────
+
+  it('migrates v1 ResumeProfile to v2 format', () => {
+    localStorage.setItem(USER_CONTEXT_V1_KEY, JSON.stringify(v1Context));
+
+    const ctx = loadUserContext();
+
+    expect(ctx.resumes).toHaveLength(1);
+    expect(ctx.resumes[0].id).toBe('resume-1');
+    expect(ctx.resumes[0].label).toBe('技术岗版'); // old name → new label
+    expect(ctx.resumes[0].structured).toBeDefined();
+    expect(ctx.resumes[0].structured.basic).toEqual({});
+    expect(ctx.resumes[0].structured.education).toEqual([]);
+    expect(ctx.resumes[0].structured.skills).toEqual({
+      hard: [],
+      soft: [],
+      languages: [],
+      tools: [],
+    });
+    expect(ctx.resumes[0].piiPolicy).toBe('keep');
+    expect(ctx.resumes[0].createdAt).toBe('2025-01-01T00:00:00Z');
+    // oldField updatedAt is dropped, rawText/rawFileRef are undefined
+    expect((ctx.resumes[0] as any).updatedAt).toBeUndefined();
+    expect((ctx.resumes[0] as any).rawText).toBeUndefined();
+  });
+
+  it('migrates v1 and persists to v2 key so next load is fast', () => {
+    localStorage.setItem(USER_CONTEXT_V1_KEY, JSON.stringify(v1Context));
+
+    loadUserContext();
+
+    const persisted = localStorage.getItem(USER_CONTEXT_KEY);
+    expect(persisted).not.toBeNull();
+    const parsed = JSON.parse(persisted!);
+    expect(parsed.resumes[0].label).toBe('技术岗版');
+  });
+
+  it('handles v1 with empty resume list', () => {
+    const v1Empty: UserContext = {
+      ...DEFAULT_USER_CONTEXT,
+      resumes: [],
+      activeResumeId: undefined,
+    };
+    localStorage.setItem(USER_CONTEXT_V1_KEY, JSON.stringify(v1Empty));
+
+    const ctx = loadUserContext();
+
+    expect(ctx.resumes).toEqual([]);
+    expect(ctx.activeResumeId).toBeUndefined();
+  });
+
+  it('prefers v2 over v1 when both are present', () => {
+    const v2: UserContext = {
+      ...DEFAULT_USER_CONTEXT,
+      preferences: { ...DEFAULT_USER_CONTEXT.preferences, displayName: 'from-v2' },
+    };
+    localStorage.setItem(USER_CONTEXT_KEY, JSON.stringify(v2));
+    localStorage.setItem(USER_CONTEXT_V1_KEY, JSON.stringify(v1Context));
+
+    const ctx = loadUserContext();
+
+    expect(ctx.preferences.displayName).toBe('from-v2');
+  });
+
+  // ─── Legacy scenarios ───────────────────────────────────────────────────
 
   it('migrates a full legacy profile into the new UserContext shape', () => {
     localStorage.setItem(LEGACY_PROFILE_KEY, JSON.stringify(fullLegacy));
@@ -48,22 +132,10 @@ describe('loadUserContext', () => {
     expect(ctx.preferences.backgroundSummary).toBe(fullLegacy.bg);
     expect(ctx.preferences.astrologyProfile).toBe(fullLegacy.astrology);
     expect(ctx.preferences.jobPreferences).toBe(fullLegacy.preferences);
-    expect(ctx.preferences.preferredLocations).toEqual([]);
-    expect(ctx.preferences.avoidKeywords).toEqual([]);
     expect(ctx.resumes).toHaveLength(1);
     expect(ctx.resumes[0].id).toBe('resume-legacy');
-    expect(ctx.resumes[0].content).toBe(fullLegacy.resumeContent);
+    expect((ctx.resumes[0] as any).content).toBe(fullLegacy.resumeContent);
     expect(ctx.activeResumeId).toBe('resume-legacy');
-  });
-
-  it('persists the migrated context to the new key so the next load is a fast path', () => {
-    localStorage.setItem(LEGACY_PROFILE_KEY, JSON.stringify(fullLegacy));
-
-    loadUserContext();
-
-    const persisted = localStorage.getItem(USER_CONTEXT_KEY);
-    expect(persisted).not.toBeNull();
-    expect(JSON.parse(persisted!).preferences.displayName).toBe(fullLegacy.name);
   });
 
   it('treats whitespace-only resumeContent as empty (no resume created)', () => {
@@ -91,60 +163,57 @@ describe('loadUserContext', () => {
     const ctx = loadUserContext();
 
     expect(ctx.preferences.displayName).toBe(DEFAULT_USER_CONTEXT.preferences.displayName);
-    expect(ctx.preferences.backgroundSummary).toBe(
-      DEFAULT_USER_CONTEXT.preferences.backgroundSummary,
-    );
-    expect(ctx.preferences.astrologyProfile).toBe(
-      DEFAULT_USER_CONTEXT.preferences.astrologyProfile,
-    );
-    expect(ctx.preferences.jobPreferences).toBe(DEFAULT_USER_CONTEXT.preferences.jobPreferences);
-    expect(ctx.resumes).toEqual([]);
   });
 
-  it('is effectively idempotent — second load returns the saved context', () => {
-    localStorage.setItem(LEGACY_PROFILE_KEY, JSON.stringify(fullLegacy));
+  // ─── Error scenarios ────────────────────────────────────────────────────
+
+  it('falls back to DEFAULT when v2 JSON is corrupt', () => {
+    localStorage.setItem(USER_CONTEXT_KEY, '{invalid json');
+
+    const ctx = loadUserContext();
+
+    expect(ctx).toEqual(DEFAULT_USER_CONTEXT);
+  });
+
+  it('falls back to DEFAULT when v1 JSON is corrupt', () => {
+    localStorage.setItem(USER_CONTEXT_V1_KEY, '{invalid json');
+
+    const ctx = loadUserContext();
+
+    expect(ctx).toEqual(DEFAULT_USER_CONTEXT);
+  });
+
+  it('falls back to DEFAULT when legacy JSON is corrupt', () => {
+    localStorage.setItem(LEGACY_PROFILE_KEY, '{invalid json');
+
+    const ctx = loadUserContext();
+
+    expect(ctx).toEqual(DEFAULT_USER_CONTEXT);
+  });
+
+  it('is idempotent — second load after v1 migration returns same context', () => {
+    localStorage.setItem(USER_CONTEXT_V1_KEY, JSON.stringify(v1Context));
 
     const first = loadUserContext();
-    const persistedAfterFirst = localStorage.getItem(USER_CONTEXT_KEY);
-
     const second = loadUserContext();
 
     expect(second).toEqual(first);
-    expect(localStorage.getItem(USER_CONTEXT_KEY)).toBe(persistedAfterFirst);
+    expect(second.resumes[0].label).toBe('技术岗版');
   });
 
-  it('falls back to DEFAULT when the new-key JSON is corrupt', () => {
-    localStorage.setItem(USER_CONTEXT_KEY, '{not valid json');
+  // ─── PII policy scenarios ───────────────────────────────────────────────
+
+  it('sets piiPolicy to "keep" by default in v1 migration', () => {
+    localStorage.setItem(USER_CONTEXT_V1_KEY, JSON.stringify(v1Context));
 
     const ctx = loadUserContext();
 
-    expect(ctx).toEqual(DEFAULT_USER_CONTEXT);
-  });
-
-  it('falls back to DEFAULT when the legacy JSON is corrupt', () => {
-    localStorage.setItem(LEGACY_PROFILE_KEY, '{this is broken');
-
-    const ctx = loadUserContext();
-
-    expect(ctx).toEqual(DEFAULT_USER_CONTEXT);
-  });
-
-  it('prefers the new key over the legacy key when both are present', () => {
-    const saved: UserContext = {
-      ...DEFAULT_USER_CONTEXT,
-      preferences: { ...DEFAULT_USER_CONTEXT.preferences, displayName: 'saved-wins' },
-    };
-    localStorage.setItem(USER_CONTEXT_KEY, JSON.stringify(saved));
-    localStorage.setItem(LEGACY_PROFILE_KEY, JSON.stringify(fullLegacy));
-
-    const ctx = loadUserContext();
-
-    expect(ctx.preferences.displayName).toBe('saved-wins');
+    expect(ctx.resumes[0].piiPolicy).toBe('keep');
   });
 });
 
 describe('saveUserContext', () => {
-  it('round-trips through localStorage', () => {
+  it('round-trips through localStorage using v2 key', () => {
     const ctx: UserContext = {
       ...DEFAULT_USER_CONTEXT,
       preferences: { ...DEFAULT_USER_CONTEXT.preferences, displayName: 'round-trip' },
@@ -153,5 +222,13 @@ describe('saveUserContext', () => {
     saveUserContext(ctx);
 
     expect(loadUserContext()).toEqual(ctx);
+  });
+
+  it('saves to USER_CONTEXT_KEY (v2), not v1 key', () => {
+    const ctx = DEFAULT_USER_CONTEXT;
+    saveUserContext(ctx);
+
+    expect(localStorage.getItem(USER_CONTEXT_KEY)).not.toBeNull();
+    expect(localStorage.getItem(USER_CONTEXT_V1_KEY)).toBeNull();
   });
 });

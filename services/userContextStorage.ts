@@ -1,6 +1,7 @@
-import { UserContext, LegacyProfile } from '../types';
+import { UserContext, LegacyProfile, ResumeStructured, LegacyV1ResumeProfile } from '../types';
 
-export const USER_CONTEXT_KEY = 'tianming_user_context_v1';
+export const USER_CONTEXT_V1_KEY = 'tianming_user_context_v1';
+export const USER_CONTEXT_KEY = 'tianming_user_context_v2';
 const LEGACY_PROFILE_KEY = 'career_navigator_profile';
 
 export const DEFAULT_USER_CONTEXT: UserContext = {
@@ -50,11 +51,63 @@ function migrateFromLegacy(raw: string): UserContext {
   };
 }
 
+function migrateFromV1(raw: string): UserContext {
+  interface V1UserContext {
+    personas: unknown[];
+    resumes: Array<{
+      id: string;
+      name: string;
+      content: string;
+      createdAt: string;
+      updatedAt?: string;
+    }>;
+    preferences: unknown;
+    activeResumeId?: string;
+    activePersonaIds: string[];
+  }
+
+  const v1 = JSON.parse(raw) as V1UserContext;
+
+  const newResumes = v1.resumes.map((old) => ({
+    id: old.id,
+    label: old.name,
+    rawText: undefined,
+    rawFileRef: undefined,
+    structured: {
+      basic: {},
+      education: [],
+      experience: [],
+      skills: { hard: [], soft: [], languages: [], tools: [] },
+      projects: [],
+    } as ResumeStructured,
+    piiPolicy: 'keep' as const,
+    createdAt: old.createdAt,
+  }));
+
+  return {
+    personas: v1.personas as UserContext['personas'],
+    resumes: newResumes,
+    preferences: v1.preferences as UserContext['preferences'],
+    activeResumeId: v1.activeResumeId,
+    activePersonaIds: v1.activePersonaIds,
+  };
+}
+
 export function loadUserContext(): UserContext {
   try {
-    const saved = localStorage.getItem(USER_CONTEXT_KEY);
-    if (saved) return JSON.parse(saved) as UserContext;
+    // Tier 1: v2 (current)
+    const v2 = localStorage.getItem(USER_CONTEXT_KEY);
+    if (v2) return JSON.parse(v2) as UserContext;
 
+    // Tier 2: v1 (Phase 1/2)
+    const v1 = localStorage.getItem(USER_CONTEXT_V1_KEY);
+    if (v1) {
+      const migrated = migrateFromV1(v1);
+      saveUserContext(migrated);
+      return migrated;
+    }
+
+    // Tier 3: legacy (V7.0 baseline)
     const legacy = localStorage.getItem(LEGACY_PROFILE_KEY);
     if (legacy) {
       const migrated = migrateFromLegacy(legacy);
