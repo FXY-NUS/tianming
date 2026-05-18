@@ -1,18 +1,20 @@
-# Tianming · 项目交接文档 v1.1
+# Tianming · 项目交接文档 v1.3
 
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
 
 ## 0.0 每次接手必读 SOP
 
-在继续任何开发前，先读并执行 `doc/agent-workflow.md`。
+在继续任何开发前，先读 `doc/agent-workflow.md`，判断当前是 Codex 本地模式还是 Claude Code 云端模式，然后只执行对应工作流：
 
-关键规则：
+- Codex 本地开发：读 `doc/codex-workflow.md`。Codex 负责本地 Windows workspace、SSH remote 检查、GitHub PR merge 后的本地 `main` 同步，以及本地验证命令。
+- Claude Code 云端开发：读 `claudecode.md`。Claude Code 直接基于 GitHub 云端仓库状态工作，不读取或假设用户本地文件、SSH config、`.env.local`、本地 dev server 或 Codex sandbox 状态。
 
-- GitHub PR merge 后，先把本地 `main` 快进同步到 `origin/main`，再从最新 `main` 开新分支。
-- 本 repo remote 使用 SSH；文档只记录 SSH 配置检查方法，绝不记录 SSH private key / API key / token。
-- Windows 下验证统一使用 `npm.cmd run test`、`npm.cmd run lint`、`npm.cmd run build`。
-- 如果用户说「GitHub 端 merge 过了」，助手应主动同步本地，不要求用户手动处理。
+共同规则：
+
+- 不要把 SSH private key、API key、token、`.env.local` 内容写入 repo 或文档。
+- GitHub 与本地是否同步由运行环境决定：Codex 需要同步本地；Claude Code 不需要处理用户本地 checkout。
+- 代码提交前按对应环境运行测试、lint、build；文档-only 变更至少做 diff 检查。
 
 ---
 
@@ -476,4 +478,4 @@ main (始终可发布)
 
 ---
 
-*文档版本 v1.2 · 2026-05-18 · Phase 3 完成更新*
+*文档版本 v1.3 · 2026-05-18 · Workflow 拆分更新*
