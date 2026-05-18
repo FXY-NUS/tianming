@@ -60,7 +60,9 @@ tianming/
 ├── .husky/                      # pre-commit hook (lint-staged)
 ├── doc/
 │   ├── HANDOFF.md               # 本文档
-│   └── phase-2-notes.md         # Phase 2 落地总结
+│   ├── phase-2-notes.md         # Phase 2 落地总结
+│   ├── phase-3-notes.md         # Phase 3 落地总结
+│   └── scoring-rubric.md        # Phase 4 评分体系设计
 ├── services/
 │   ├── geminiService.ts         # Gemini API 调用层
 │   ├── userContextStorage.ts    # UserContext 持久化
@@ -199,16 +201,27 @@ PDF / DOCX / 图片 / 文本统一交给 Gemini，输出结构化 JSON。**不�
 
 ---
 
-### Phase 4 — 匹配引擎重构
-**目标**：Flash 初筛和 Pro 深审统一吃 `MatchContext`。
+### Phase 4 — Match Engine + Scoring Engine ⏳ In Progress
+**目标**：把 Flash 初筛 / Pro 深审从“让 Gemini 直接打分”升级为可解释、可复现的评分系统。
 
-**实现**：
-- `src/core/matchEngine.ts` 抽象 `MatchEngine` 类
-- `buildSystemPrompt(ctx)` 装配 Personas + Resume + Preferences
-- `buildResponseSchema(ctx)` 按启用的 Persona 动态扩展 schema
-- Flash 初筛额外吃硬性条件（学历/经验年限/语言要求）
+**核心原则**（详见 `doc/scoring-rubric.md`）：
+- LLM 抽证据，代码算分；Gemini 不直接拥有最终总分。
+- `unknown !== 0`：缺失信息只降低 confidence，不默认扣成 0 分。
+- 年限 / 地点 / 薪资 / avoid keywords 默认降权并标红；只有用户显式开启 hard filter 才 hard reject。
+- 搜索结果页使用 `JobCardSnapshot` 做 `triage`；完整 JD 使用 `JobDetail` 做正式 `audit`。
+- Persona 是小权重辅助层，紫微默认只增强叙事，除非用户显式开启加权。
 
-**工期**：1-2 天
+**实现拆解**：
+- `src/core/matchTypes.ts`：定义 `JobCardSnapshot` / `JobDetail` / `ExtractedEvidence` / `DimensionScore` / `MatchScore` / `MatchFeedbackRecord`。
+- `src/core/scoringEngine.ts`：实现 Pass A/C（规则证据 + 代码聚合）。
+- `services/jobEvidenceExtractor.ts`：实现 Pass B（Gemini evidence extraction + responseSchema + 客户端二次校验）。
+- 后续继续：Persona 注册入口 + Profile Modal Persona UI + 将现有 `geminiService` 逐步迁移到 MatchContext。
+
+**验收**：
+- 同一输入重复评分稳定。
+- unknown 维度不进入加权分母。
+- hard filter 失败只在用户显式开启时触发。
+- `npm.cmd run test` / `npm.cmd run lint` / `npm.cmd run build` 通过。
 
 ---
 

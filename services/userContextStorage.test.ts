@@ -114,6 +114,25 @@ describe('loadUserContext', () => {
     expect(parsed.resumes[0].label).toBe('技术岗版');
   });
 
+  it('preserves optional scoring preferences during v1 migration', () => {
+    localStorage.setItem(
+      USER_CONTEXT_V1_KEY,
+      JSON.stringify({
+        ...v1Context,
+        preferences: {
+          ...DEFAULT_USER_CONTEXT.preferences,
+          salaryRange: [1000, 3000],
+          workMode: 'hybrid',
+        },
+      }),
+    );
+
+    const ctx = loadUserContext();
+
+    expect(ctx.preferences.salaryRange).toEqual([1000, 3000]);
+    expect(ctx.preferences.workMode).toBe('hybrid');
+  });
+
   it('handles v1 with empty resume list', () => {
     const v1Empty: UserContext = {
       ...DEFAULT_USER_CONTEXT,
