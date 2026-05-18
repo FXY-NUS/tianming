@@ -9,7 +9,7 @@
 
 1. **批量 JD 初筛**（Gemini Flash）：30 份 JD 同时打分
 2. **深度审计**（Gemini Pro）：单 JD 出"卦象 + 详细 Pros/Cons + 2026 求职指导 + 面试策略 + 合同红旗"
-3. **未来路线**：Persona 插件系统（MBTI/Big5/Holland/八字）+ 简历上传与结构化解析 + 浏览器扩展一键采集 JD + 桌面端打包
+3. **未来路线**：Persona 插件系统（MBTI/Big5/Holland/紫微斗数）+ 简历上传与结构化解析 + 浏览器扩展一键采集 JD + 桌面端打包
 
 ## 二、当前状态
 
@@ -17,6 +17,8 @@
   - `services/geminiService.ts`：从 `window.aistudio` API 改为 `getApiKey()` 助手，读 `localStorage` 或 `import.meta.env.VITE_GEMINI_API_KEY`
   - `App.tsx`：`checkApiKey` / `handleSelectKey` 改为本地 prompt + localStorage 方案
 - 本地 `npm run dev` 可正常调用 Gemini API
+- Phase 0 / 1 / 2 已 merge 进 main：工具链（Tailwind / Zod / RHF / Vitest / ESLint / Prettier / Husky）+ UserContext 三模块数据模型 + Persona 插件系统（4 个插件：MBTI / Holland / Big5 / 紫微斗数）。详见 `doc/HANDOFF.md` §2 与 `doc/phase-2-notes.md`
+- **当前焦点**：Phase 3 简历上传 + Gemini 多模态结构化解析（分支 `feat/phase-3-resumes`）
 
 ## 三、Tech Stack
 
@@ -34,9 +36,9 @@
 | Phase | 内容 | 状态 |
 |---|---|---|
 | 0 | V7.0 baseline import + AI Studio 依赖修复 | ✅ Done |
-| 1 | `UserContext` 数据模型重构 + localStorage 迁移脚本 | ⏳ Next |
-| 2 | Persona Plugin 系统（MBTI / Holland / Big5 / 八字隐藏插件）| |
-| 3 | 简历上传 + Gemini 多模态结构化解析 | |
+| 1 | `UserContext` 数据模型重构 + localStorage 迁移脚本 | ✅ Done |
+| 2 | Persona Plugin 系统（MBTI / Holland / Big5 / 紫微斗数隐藏插件）| ✅ Done |
+| 3 | 简历上传 + Gemini 多模态结构化解析 | ⏳ Next |
 | 4 | 匹配引擎重构（Flash 初筛 + Pro 深审统一上下文装配）| |
 | 5 | 存储升级 localStorage → Dexie | |
 | 5.5 | Gemini 多模态截图导入 JD（可选）| |
@@ -59,3 +61,11 @@ interface UserContext {
   activeResumeId?: string;
   activePersonaIds: string[];
 }
+```
+
+## 六、隐私红线（详见 `doc/HANDOFF.md` §7）
+
+- 永远不 commit `.env.local` / 不硬编码 API Key 到源代码
+- **简历原文件永远不上云**（PII 红线，对应架构决策 D6）；结构化数据可上云但需 PII 脱敏
+- 公网部署前必须引入后端代理（API Key 不能暴露给浏览器）
+- 浏览器扩展不直连 Gemini（扩展包可被反编译，Key 必盗）
