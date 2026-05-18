@@ -17,8 +17,8 @@
   - `services/geminiService.ts`：从 `window.aistudio` API 改为 `getApiKey()` 助手，读 `localStorage` 或 `import.meta.env.VITE_GEMINI_API_KEY`
   - `App.tsx`：`checkApiKey` / `handleSelectKey` 改为本地 prompt + localStorage 方案
 - 本地 `npm run dev` 可正常调用 Gemini API
-- Phase 0 / 1 / 2 已 merge 进 main：工具链（Tailwind / Zod / RHF / Vitest / ESLint / Prettier / Husky）+ UserContext 三模块数据模型 + Persona 插件系统（4 个插件：MBTI / Holland / Big5 / 紫微斗数）。详见 `doc/HANDOFF.md` §2 与 `doc/phase-2-notes.md`
-- **当前焦点**：Phase 3 简历上传 + Gemini 多模态结构化解析（分支 `feat/phase-3-resumes`）
+- Phase 0 / 1 / 2 / 3 已 merge 进 main：工具链（Tailwind / Zod / RHF / Vitest / ESLint / Prettier / Husky）+ UserContext 三模块数据模型 + Persona 插件系统（4 个插件：MBTI / Holland / Big5 / 紫微斗数）+ 简历上传与多模态解析（多版本管理 + JSON 导出 + Prompt 命理图层条件化）。详见 `doc/HANDOFF.md` §2、`doc/phase-2-notes.md`、`doc/phase-3-notes.md`
+- **当前焦点**：Phase 4 匹配引擎重构（抽象 `MatchEngine` 统一 Flash 初筛/Pro 深审/聊天的上下文装配，并把 Persona / 生日等数据真正接进 Profile Modal UI）
 
 ## 三、Tech Stack
 
@@ -38,8 +38,8 @@
 | 0 | V7.0 baseline import + AI Studio 依赖修复 | ✅ Done |
 | 1 | `UserContext` 数据模型重构 + localStorage 迁移脚本 | ✅ Done |
 | 2 | Persona Plugin 系统（MBTI / Holland / Big5 / 紫微斗数隐藏插件）| ✅ Done |
-| 3 | 简历上传 + Gemini 多模态结构化解析 | ⏳ Next |
-| 4 | 匹配引擎重构（Flash 初筛 + Pro 深审统一上下文装配）| |
+| 3 | 简历上传 + Gemini 多模态结构化解析 | ✅ Done |
+| 4 | 匹配引擎重构（Flash 初筛 + Pro 深审统一上下文装配）| ⏳ Next |
 | 5 | 存储升级 localStorage → Dexie | |
 | 5.5 | Gemini 多模态截图导入 JD（可选）| |
 | 6 | 浏览器扩展（Manifest V3，主流招聘站 JD 一键采集）| |

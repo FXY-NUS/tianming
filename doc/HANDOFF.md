@@ -51,6 +51,7 @@
 - ✅ **Phase 0**：V7.0 baseline 导入 + AI Studio 依赖适配
 - ✅ **Phase 1**：UserContext 数据模型 + 工程化工具链（Tailwind / ESLint / Prettier / Husky / Vitest / Zod / RHF）
 - ✅ **Phase 2**：Persona 插件系统（MBTI / Holland / Big5 / 紫微斗数）
+- ✅ **Phase 3**：简历上传 + Gemini 多模态结构化解析 + 多版本管理 + Prompt 命理图层条件化（详见 `doc/phase-3-notes.md`）
 
 ### 当前 Repo 结构
 
@@ -178,25 +179,23 @@ PDF / DOCX / 图片 / 文本统一交给 Gemini，输出结构化 JSON。**不�
 
 ---
 
-### Phase 3 — 简历上传 + 多模态解析 ⏳ NEXT
+### Phase 3 — 简历上传 + 多模态解析 ✅ Done
 **目标**：用户上传 PDF/DOCX/图片简历，Gemini 解析为结构化数据，用户审阅编辑后入库。
 
-**实现**：
-- 上传 UI：拖拽 + 文件选择（支持多文件，简历多版本）
-- 解析：`services/resumeParser.ts` 调用 Gemini 多模态 + responseSchema
-- 审阅页：每个字段可编辑、可标记 PII 敏感度
-- 多版本管理：`ResumeProfile[]`，每份给个 label（"技术岗版" / "咨询版"）
+**实际落地**（PR #5 / #6 / #7 / #8）：
+- 上传 UI：单文件拖拽 / 选择，6 类 MIME（PDF / DOCX / PNG / JPG / WEBP / TXT）
+- 解析：`services/resumeParser.ts` Gemini 3 Pro 多模态 + responseSchema + 客户端二次校验
+- 审阅页：每个字段可编辑，编辑即时反映到 `structured`，「保存修改」覆盖回激活简历
+- 多版本管理：`ResumeProfile[]`（label / structured / piiPolicy / createdAt），侧边栏支持新增/重命名/删除/切换/JSON 导出，全部即时持久化
+- 迁移链：legacy（V7.0 `resumeContent`）→ v1（`name/content`）→ v2（`label/rawText/structured`），有 `isValidUserContext` / `normalizePreferences` 兜底
+- Prompt 装配：`PRO_AUDIT_PROMPT` 通过 `buildActiveResumeSection(ctx)` 自动注入激活简历结构化字段；`hasAstrologyContext(ctx)` 决定要不要叠加紫微图层，避免新用户无命理数据时 Gemini 自由发挥"天府坐命"
+- ⚠️ 推迟到后续 Phase：`piiPolicy: 'mask' | 'strip'` UI（Phase 9）、`rawFileRef` Blob 存储（Phase 5）、多文件批量上传
 
-**效果**：用户 30 秒内把简历变成结构化数据。
+**落地细节见 `doc/phase-3-notes.md`**。
 
-**工期**：2 天（核心战场）
-
-**待商榷**（开 Phase 3 前必须拍板）：
-- Q1: 简历 PII 处理默认策略（保留原文加密 / 仅结构化 / 完全剥离）
-- Q1': 是否允许导出结构化简历为 JSON
-
-**注意**：main 上 `ResumeProfile` 类型当前比较精简（id/name/content/createdAt/updatedAt），
-Phase 3 需要扩展到 §6 草图的形态。
+**拍板了的开放问题**：
+- Q1 → `piiPolicy: 'keep'` 默认（结构化明文 + 原文件不存盘），见 §9
+- Q1' → 允许导出 JSON + UI 显式 PII 警告条，见 §9
 
 ---
 
@@ -402,8 +401,6 @@ main (始终可发布)
 
 | # | 问题 | 推荐方案 | 何时拍板 | 状态 |
 |---|---|---|---|---|
-| Q1 | 简历 PII 处理默认策略 | 本地加密保留原文 + 结构化明文 | Phase 3 启动前 | ⏳ Open |
-| Q1' | 是否允许导出结构化简历为 JSON | 倾向允许（用户主权）| Phase 3 启动前 | ⏳ Open |
 | Q3 | 扩展先适配哪 3 个网站 | LinkedIn + BOSS + 智联 | Phase 6 前 | ⏳ Open |
 | Q4 | 反向功能（Cover Letter）是否前置 | 维持 Phase 8 | Phase 4 前确认 | ⏳ Open |
 | Q5 | 云同步是否做 | 倾向不做（隐私优先）| Phase 8 完成后 | ⏳ Open |
@@ -412,6 +409,8 @@ main (始终可发布)
 | Q8 | 项目主品牌色 / Logo | 暂用 V7.0 紫色 | Phase 7 | ⏳ Open |
 
 **已解决**（不再讨论）：
+- ~~Q1: 简历 PII 处理默认策略~~ → 结构化明文（`piiPolicy: 'keep'`） + 原文件不存盘 + 不上云
+- ~~Q1': 是否允许导出结构化简历为 JSON~~ → 允许，UI 显式 PII 警告条
 - ~~Q2: 紫微斗数 prompt 怎么写~~ → Phase 2 已实现，让 Gemini 模拟
 
 ---
@@ -430,22 +429,27 @@ main (始终可发布)
 
 ## 11. 接力指令
 
-**当前位置**：Phase 0 / 1 / 2 ✅ Done，准备进入 **Phase 3（简历上传 + 多模态解析）**。
+**当前位置**：Phase 0 / 1 / 2 / 3 ✅ Done，准备进入 **Phase 4（匹配引擎重构）**。
 
 **新 session 第一步**：
 1. 读完本文档全文
-2. 读 `doc/phase-2-notes.md` 了解最近代码层和约定
-3. 浏览 `types.ts`、`services/`、`src/personas/` 摸清现有范式
+2. 读 `doc/phase-2-notes.md` 与 `doc/phase-3-notes.md` 了解最近代码层和约定
+3. 浏览 `types.ts`、`constants.tsx`、`services/`、`src/personas/`、`src/components/ResumeModal.tsx` 摸清现有范式
 4. **不要写任何代码**，先：
    a. 用清晰友好的中文向用户确认你理解了项目架构（一两段，避免堆术语）
-   b. 提出 Phase 3 的具体拆解（5-8 个 commit，每个写清"干什么 / 触碰文件 / 风险"）
-5. 等用户拍板 Q1 + Q1' + commit 拆解，再开始 Phase 3 第一个 commit
+   b. 提出 Phase 4 的具体拆解（5-8 个 commit，每个写清"干什么 / 触碰文件 / 风险"）
+5. Phase 4 的核心交付：
+   - `src/core/matchEngine.ts` 抽象 `MatchEngine` 类（吃 `MatchContext`）
+   - `buildSystemPrompt(ctx, goal)` 统一替代 `FLASH_FILTER_PROMPT` / `PRO_AUDIT_PROMPT` / `CHAT_SYSTEM_PROMPT`
+   - `buildResponseSchema(ctx, goal)` 按激活的 Persona 动态扩展 schema
+   - Flash 初筛额外吃简历的硬性条件（学历/经验年限/语言要求）
+   - **同时把 Persona 注册入口 `src/personas/index.ts` 建起来** + Profile Modal 加 Persona / 生日 UI（不然 Phase 2 / Phase 3 装配再完美也没数据可用）
 
 **禁止**：
 - 不要一上来就改代码
-- 不要跳到 Phase 4 之后
+- 不要跳到 Phase 5 之后
 - 不要询问任何已在本文档明确决定的事
 
 ---
 
-*文档版本 v1.1 · 2026-05-13*
+*文档版本 v1.2 · 2026-05-18 · Phase 3 完成更新*
