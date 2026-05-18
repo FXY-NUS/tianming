@@ -1,3 +1,5 @@
+import type { ExtractedEvidence, MatchScore } from './src/core/matchTypes';
+
 export interface Job {
   id: string;
   title: string;
@@ -12,9 +14,14 @@ export interface Job {
 
   flashScore?: number;
   flashMatchReason?: string;
+  matchScore?: MatchScore;
+  extractedEvidence?: ExtractedEvidence;
 
   analysis?: {
     score: number;
+    matchScore?: MatchScore;
+    extractedEvidence?: ExtractedEvidence;
+    evidenceStatus?: 'ok' | 'missing' | 'error';
     summary: string;
     hexagram: string;
     judgment: string; // 强烈推荐 / 谨慎尝试 / 立即放弃

@@ -69,7 +69,7 @@ export const FLASH_FILTER_PROMPT = (ctx: UserContext) => `
 1. 经验过滤：看到 "2+ years", "Senior", "Manager" 且没说 "Fresh/Junior" 的，打分 < 15。
 2. 背景过滤：避开与背景明显不符的岗位。
 3. 重复检测：请对相似 JD 给出一致的低分或高分。
-输出 JSON 数组，包含 ID, Score, Reason(10字内)。
+输出 JSON 数组，包含 id、reason(10字内) 和 matchedSkills/missingSkills/transferableSkills/cultureSignals/growthReasons 等证据字段；不要输出最终总分。
 `;
 
 export const PRO_AUDIT_PROMPT = (ctx: UserContext) => {
