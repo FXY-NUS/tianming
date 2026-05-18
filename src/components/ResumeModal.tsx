@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Trash2, Edit2 } from 'lucide-react';
+import { X, Plus, Trash2, Edit2, Download } from 'lucide-react';
 import type { UserContext, ResumeProfile, ResumeStructured } from '../../types';
 import { parseResumeFile, parseResumeText } from '../../services/resumeParser';
 
@@ -186,6 +186,28 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
     onClose();
   };
 
+  const handleExportJSON = (resume: ResumeProfile) => {
+    const exportData = {
+      id: resume.id,
+      label: resume.label,
+      structured: resume.structured,
+      piiPolicy: resume.piiPolicy,
+      createdAt: resume.createdAt,
+    };
+
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().split('T')[0];
+    link.href = url;
+    link.download = `resume-${resume.label}-${today}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -239,6 +261,16 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          handleExportJSON(resume);
+                        }}
+                        className="p-1 hover:bg-green-200 rounded text-green-600"
+                        title="导出 JSON"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleStartEdit(resume.id);
                         }}
                         className="p-1 hover:bg-blue-200 rounded"
@@ -267,6 +299,9 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
             >
               <Plus size={16} /> 新增简历
             </button>
+            <div className="mx-3 mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+              导出的 JSON 包含 PII，请勿上传到公开渠道
+            </div>
           </div>
 
           {/* Right Content */}
