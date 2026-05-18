@@ -5,17 +5,20 @@
 
 ## 0. 每次接手必读
 
-新 session 开始时先读：
+本文件保留项目背景和路线；具体 agent 工作流先通过 `doc/agent-workflow.md` 分流。
 
-1. `doc/agent-workflow.md`：GitHub / SSH / 本地同步 / Windows 命令 SOP。
-2. `doc/HANDOFF.md`：项目总交接和 Phase 路线。
-3. 当前 Phase notes，例如 Phase 4 期间读 `doc/scoring-rubric.md` 和 `doc/phase-4-notes.md`（如果存在）。
+如果当前运行环境是 **Claude Code 云端 GitHub workspace**，新 session 开始时先读：
+
+1. `doc/agent-workflow.md`：判断运行环境，不混用本地/云端规则。
+2. `claudecode.md`：Claude Code 云端开发 SOP。
+3. `doc/HANDOFF.md`：项目总交接和 Phase 路线。
+4. 当前 Phase notes，例如 Phase 4 期间读 `doc/scoring-rubric.md` 和 `doc/phase-4-notes.md`（如果存在）。
 
 关键提醒：
 
-- GitHub PR merge 后，下一轮先同步本地 `main`，再开新分支继续。
-- 远端使用 SSH，但不要把 SSH private key、API key、token 写入 repo 或文档。
-- Windows 下用 `npm.cmd run test/lint/build`。
+- Claude Code 直接基于 GitHub 云端仓库状态工作，不假设能读取用户本地文件、SSH key、`.env.local` 或 Codex sandbox 状态。
+- Codex 才负责本地 Windows workspace、SSH remote 检查、GitHub merge 后的本地 `main` 同步；对应规则见 `doc/codex-workflow.md`。
+- 任何环境都不要把 SSH private key、API key、token 写入 repo 或文档。
 
 ## 一、项目背景
 
