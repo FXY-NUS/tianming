@@ -189,13 +189,52 @@ function scoreExperience(
   }
 
   if (requiredYears === undefined && isSeniorityFlagged(text)) {
+    // Seniority inferred from a title or snippet alone is weak evidence. Only
+    // hard-fail when the resume gives us concrete counter-evidence (estimated
+    // years well below a typical seniority floor); otherwise it's a warning so
+    // we don't reject senior candidates browsing senior roles.
+    const seniorityFloorYears = 3;
+    const estimated = resumeSnapshot.estimatedYears;
+    const evidenceLines = [
+      'Title or snippet contains seniority language without an explicit year count.',
+    ];
+
+    if (typeof estimated !== 'number') {
+      return {
+        key: 'experience',
+        label: 'Experience fit',
+        score: 35,
+        confidence: 'low',
+        evidence: evidenceLines,
+        warnings: [
+          'Seniority is inferred from text and resume years are unknown — treat as a triage warning.',
+        ],
+        hardFail: false,
+      };
+    }
+
+    evidenceLines.push(`Estimated resume years: ${estimated}`);
+    if (estimated >= seniorityFloorYears) {
+      return {
+        key: 'experience',
+        label: 'Experience fit',
+        score: 80,
+        confidence: 'medium',
+        evidence: evidenceLines,
+        warnings: [
+          'Seniority is inferred from text; recheck the JD for explicit year requirements.',
+        ],
+        hardFail: false,
+      };
+    }
+
     return {
       key: 'experience',
       label: 'Experience fit',
-      score: 35,
+      score: clampScore(((estimated + 0.5) / seniorityFloorYears) * 100),
       confidence: 'medium',
-      evidence: ['Title or snippet contains seniority language without an explicit year count.'],
-      warnings: ['Seniority is inferred from text, so this should be treated as a triage warning.'],
+      evidence: evidenceLines,
+      warnings: ['Resume years are below the typical seniority floor for this title.'],
       hardFail: requireExperienceFit,
     };
   }
@@ -450,6 +489,20 @@ function isSeniorityFlagged(text: string): boolean {
 }
 
 function estimateYearsFromPeriod(period: string): number | undefined {
+  // Prefer YYYY-MM / YYYY.MM / YYYY/MM patterns so a short stint
+  // (e.g. a 3-month internship) isn't rounded up to a full year.
+  const monthMatches = [...period.matchAll(/(\d{4})[-./](\d{1,2})(?!\d)/g)]
+    .map((match) => ({ year: Number(match[1]), month: Number(match[2]) }))
+    .filter((entry) => entry.month >= 1 && entry.month <= 12);
+
+  if (monthMatches.length >= 2) {
+    const [start, end] = monthMatches;
+    const months = (end.year - start.year) * 12 + (end.month - start.month);
+    if (months < 0) return undefined;
+    return Math.max(0.1, Math.round((months / 12) * 10) / 10);
+  }
+
+  // Year-only fallback (legacy behaviour).
   const years = period.match(/\d{4}/g)?.map(Number) ?? [];
   if (years.length < 1) return undefined;
   const startYear = years[0];
