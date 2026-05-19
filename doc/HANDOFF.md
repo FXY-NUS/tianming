@@ -1,4 +1,4 @@
-# Tianming · 项目交接文档 v1.3
+# Tianming · 项目交接文档 v1.4
 
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
@@ -155,6 +155,13 @@ PDF / DOCX / 图片 / 文本统一交给 Gemini，输出结构化 JSON。**不�
 2. **兜底**：复制粘贴文本框
 3. ~~截图 OCR~~：已砍掉，UX 太差
 
+### D4'. 扩展抓取边界（合规 + 防封号硬约束）
+扩展**不做后台批量请求**，**不自动打开/请求 JD 详情页**。允许的抓取面只有两类：
+1. `JobCardSnapshot`：当前搜索结果页**已经加载**的卡片（用 IntersectionObserver 监听滚动新出现的卡片，不主动翻页）。
+2. `JobDetail`：用户**主动点开**详情后，content script 读取详情区。
+
+理由：LinkedIn / Indeed / SEEK / JobsDB / Symplicity 的服务条款明文禁止自动化 scraping 和批量请求；账号封禁的代价比省下的时间高得多。我们的"省时间"价值在**对已加载内容的智能粗筛**，不在自动化抓取。
+
 ### D5. 扩展不直连 Gemini API
 扩展包是公开的，API Key 塞进去会被反编译盗用。扩展只抽取 JD 数据，
 通过 Chrome Storage 传给 Web App，LLM 调用永远在 Web App 一侧。
@@ -172,6 +179,52 @@ PDF / DOCX / 图片 / 文本统一交给 Gemini，输出结构化 JSON。**不�
 - 每个 Phase 一个 feature branch：`feat/phase-N-xxx` 或 `chore/phase-N-xxx`
 - 通过 PR 合并 main，**不使用长期 `refactor/v8` 分支**
 - commit 用 conventional commits（feat: / fix: / chore: / docs: / refactor: / test:）
+
+### D9. API Key 安全模型 + 产品化路线
+**当前阶段（开发 / 单人 BYOK）**：
+- Gemini API Key 通过 `localStorage.getItem('GEMINI_API_KEY')` 读取，或 `.env.local` 注入；纯前端调用。
+- 仅适合开发者和小范围测试。
+
+**Phase 6 起（扩展上线时硬约束）**：
+- 必须引入后端代理（Cloudflare Worker / Vercel Edge / 自建）。
+- API Key 只存后端环境变量；浏览器 / 扩展永远拿不到 Key。
+- 扩展和 Web App 都走代理调用，扩展不直连 Gemini（见 D5）。
+
+**产品化路线（Phase 6+ 之后）**：
+| 模式 | 用途 |
+|---|---|
+| **BYOK Mode** | 开发者、技术用户、内部测试；用户自带 Key |
+| **Tianming Credits** | 普通用户买积分（100 次卡片粗筛 / 10 次 Pro 深审等粒度） |
+| **Subscription** | 月费订阅，按额度封顶 |
+| **Trial Credits** | 新用户少量免费额度 + 防滥用机制 |
+
+**架构形态**：
+```
+Web App / Extension
+  → Tianming Backend API
+     → Auth / Quota / Billing / Rate Limit
+     → Gemini API
+  → 结构化结果回前端
+```
+后端必须负责：用户登录、调 Gemini、token 计数、每用户每日 / 月限额、Stripe / 类似支付、防刷接口、成本预警 / 熔断、记录 `modelVersion` + `rubricVersion` + `scoringVersion`。
+
+### D10. 多 Provider 抽象（**预留，不实现**）
+为防止"换模型导致前后打分不一致"，未来允许接 Claude / OpenAI / DeepSeek，但实现服从以下约束：
+
+```ts
+interface LlmProvider {
+  extractJobEvidence(job: Job, ctx: UserContext): Promise<ExtractedEvidence>;
+  parseResume(file: File): Promise<ResumeStructured>;
+  generateAuditNarrative(job: Job, ctx: UserContext): Promise<AuditNarrative>;
+}
+```
+
+**铁律**：
+- 任何 provider 都只输出**证据 + 叙述**，**不输出 overall 或 judgment**。
+- 最终分数永远由 `src/core/scoringEngine.ts` 计算（见 D7 + scoring-rubric.md）。
+- 换 provider 只影响"证据抽取质量"，**不能破坏评分规则**。
+
+**实现时机**：等真的要接第二个 model 时再写实现；当前只 Gemini，多写一层抽象只是 over-engineering。
 
 ---
 
@@ -214,39 +267,58 @@ PDF / DOCX / 图片 / 文本统一交给 Gemini，输出结构化 JSON。**不�
 
 ---
 
-### Phase 4 — Match Engine + Scoring Engine ⏳ In Progress
-**目标**：把 Flash 初筛 / Pro 深审从“让 Gemini 直接打分”升级为可解释、可复现的评分系统。
+### Phase 4 — Match Engine + Scoring Engine ✅ Core Done · Smoke-Test 收尾中
+**目标**：把 Flash 初筛 / Pro 深审从"让 Gemini 直接打分"升级为可解释、可复现的评分系统。
 
 **核心原则**（详见 `doc/scoring-rubric.md`）：
 - LLM 抽证据，代码算分；Gemini 不直接拥有最终总分。
 - `unknown !== 0`：缺失信息只降低 confidence，不默认扣成 0 分。
 - 年限 / 地点 / 薪资 / avoid keywords 默认降权并标红；只有用户显式开启 hard filter 才 hard reject。
 - 搜索结果页使用 `JobCardSnapshot` 做 `triage`；完整 JD 使用 `JobDetail` 做正式 `audit`。
-- Persona 是小权重辅助层，紫微默认只增强叙事，除非用户显式开启加权。
+- Persona 是小权重辅助层（总权重上限 15%），紫微默认只增强叙事，除非用户显式开启加权。
 
-**实现拆解**：
-- `src/core/matchTypes.ts`：定义 `JobCardSnapshot` / `JobDetail` / `ExtractedEvidence` / `DimensionScore` / `MatchScore` / `MatchFeedbackRecord`。
-- `src/core/scoringEngine.ts`：实现 Pass A/C（规则证据 + 代码聚合）。
-- `services/jobEvidenceExtractor.ts`：实现 Pass B（Gemini evidence extraction + responseSchema + 客户端二次校验）。
-- 后续继续：Persona 注册入口 + Profile Modal Persona UI + 将现有 `geminiService` 逐步迁移到 MatchContext。
+**已落地**（PR #10 / #11 / #12 / #13 / #14）：
+- `src/core/matchTypes.ts`：`JobCardSnapshot` / `JobDetail` / `ExtractedEvidence` / `DimensionScore` / `MatchScore` / `MatchFeedbackRecord`。
+- `src/core/scoringEngine.ts`：Pass A/C 实现（规则维度 + 加权聚合 + persona cap）；experience hardFail 已收敛，partial-year 估算支持 YYYY-MM。
+- `services/jobEvidenceExtractor.ts`：Pass B（Gemini evidence + responseSchema + 客户端二次校验，`temperature: 0.1`）。
+- `services/matchPromptBuilder.ts`：prompt + responseSchema 统一装配，明确告诉 LLM"不要输出最终 score / judgment"。
+- `services/geminiService.ts`：批量初筛和单 JD 深审都接进 MatchEngine。
+- Persona 注册入口 `src/personas/index.ts` + Profile Modal Persona tab。
+- `types.ts`：`UserContext.feedbackRecords?: MatchFeedbackRecord[]` 预留（Phase 8+ ML 学权重铺垫）。
+
+**Smoke-test 暴露的待修问题**（Codex 当前在分支上修，进 Phase 5 前必须清掉）：
+- **A1 数据丢失**（最严重）：切走网站再切回，账号 / 简历 / preferences 全部消失。怀疑是 `setUserCtx` stale closure 把空 ctx 覆盖回 localStorage，或者某条错误路径调用了 `localStorage.clear()`。Phase 5 Dexie 升级会顺手把这层做扎实。
+- **A2 简历 → preferences 数据流断裂**：解析出的 `ResumeStructured.basic.name / location / skills` 不会回填到 preferences。决定走"方案 α"——审阅页给一个"建议同步"按钮，不静默覆盖。
+- **A3 薪资 slider UX**：先调下限再调上限，上限输入会联动改变下限。受控组件 min/max 逻辑写反，1 小时内可修。
+- **A4 scoring 大量 unknown**：location 维度没有 fallback、JD 没有 `locationText` 字段、period 自由文本估年限失败。当 unknown > 50% 时 UI 应该显示"信息不足"，而不是给一个被几个维度撑起来的虚高分。
+- **A5 性能**（不阻塞收尾）：Flash / Pro 都慢，留到 Phase 6 引入后端代理时做 streaming + token 预算。
 
 **验收**：
-- 同一输入重复评分稳定。
-- unknown 维度不进入加权分母。
-- hard filter 失败只在用户显式开启时触发。
-- `npm.cmd run test` / `npm.cmd run lint` / `npm.cmd run build` 通过。
+- 同一输入重复评分稳定（`temperature: 0.1` + deterministic 加权）。
+- unknown 维度不进入加权分母（已实现）。
+- hard filter 失败只在用户显式开启时触发（已实现）。
+- `npm.cmd run test` / `npm.cmd run lint` / `npm.cmd run build` 全过（当前 112 tests pass）。
+- 上述 A1-A4 都修完。
 
 ---
 
 ### Phase 5 — 存储升级 localStorage → Dexie
-**目标**：JD / UserContext / 简历 Blob 全迁到 IndexedDB。
+**目标**：JD / UserContext / 简历 Blob 全迁到 IndexedDB；**同时根治 Phase 4 smoke-test A1 的数据丢失**。
 
 **实现**：
-- `src/storage/db.ts` Dexie schema
-- 用 `dexie-react-hooks` 的 `useLiveQuery` 替换 useState + useEffect
-- localStorage 一次性迁移到 Dexie
+- `src/storage/db.ts` Dexie schema（`personas` / `resumes` / `jobs` / `userContext` / `feedbackRecords`）。
+- `src/storage/migration.ts` localStorage → Dexie 一次性迁移函数，沿用 Phase 1/3 三段迁移链范式。
+- 用 `dexie-react-hooks` 的 `useLiveQuery` 替换 `useState(loadUserContext())` + `useEffect(saveUserContext)` 模式，**多 tab 写入不会互相覆盖**。
+- 简历 `rawFileRef`：types.ts 草图早就预留，Phase 5 真的把上传的原 PDF/DOCX 存进 IndexedDB Blob。
+- A1 根因调查：grep 所有 `localStorage` 写点 / 检查 setUserCtx stale closure / 检查异常路径是否覆盖空 ctx。
 
-**工期**：半天
+**工期**：半天 ~ 1 天。
+
+**验收**：
+- 关 tab 再开，数据不丢。
+- 多 tab 同时改 → liveQuery 同步，不互相覆盖。
+- 简历 Blob 真的能从 IndexedDB 重新打开预览。
+- 旧 localStorage 数据自动迁移（或保留 `_legacy` 备份）。
 
 ---
 
@@ -256,18 +328,18 @@ UX 不如复制粘贴，跳过。未来需要再开。
 ---
 
 ### Phase 6 — 浏览器扩展（Manifest V3）
-**目标**：主流招聘站一键采集 JD。
+**目标**：主流招聘站智能粗筛 + 用户主动详情捕获。**严格遵守 D4' 抓取边界**——不批量自动打开详情页。
 
-**实现**：
-- 独立子项目 `extension/`，与主 Web App 同 repo
-- `manifest.json` MV3，Service Worker 后台
-- Content Scripts：site adapter（LinkedIn / BOSS / 智联 / Indeed / 猎聘）
-- 通用启发式抽取器作为兜底
-- 通过 Chrome Storage 写入 JD，Web App 监听变化拉取
+**实现拆解**：
+- **6.0 文档收口**（半小时）：D4' / D9 / D10 在 §4 已写入，确认 README / Chrome Web Store 描述也用合规语言。
+- **6.1 MV3 骨架 + 1 个 site adapter**：独立子项目 `extension/`，manifest V3 + service worker；建议 **LinkedIn 起步**（覆盖广 + 静态 DOM 相对稳定）。
+- **6.2 卡片粗筛 UI**：IntersectionObserver 跟当前页可视卡片，每个卡片角盖徽章（Pass / Maybe / Reject / Need full JD）；调用 Web App 的 MatchEngine 做 `triage` 评分。
+- **6.3 详情捕获**：用户主动点开 JD detail → content script 抽完整 JD → Chrome Storage 传 Web App → 触发 audit 流。
+- **6.4 后端代理雏形**（Phase 6 硬前置）：哪怕只是 Cloudflare Worker / Vercel Edge Function 转发 Gemini，API Key 必须只在后端（见 D5 / D9）。
 
-**工期**：2-3 天
+**工期**：2-3 天 + 后端代理 1 天。
 
-**待商榷**：先适配哪 3 个网站起步（建议 LinkedIn + BOSS + 智联）
+**待商榷**：起步先支持 1 个站还是 3 个站（LinkedIn / BOSS / 智联）。建议先 LinkedIn 跑通整套，再扩两个。
 
 ---
 
@@ -336,11 +408,24 @@ export interface UserContext {
   preferences: UserPreferences;
   activeResumeId?: string;
   activePersonaIds: string[];
+  feedbackRecords?: MatchFeedbackRecord[];  // Phase 8+ 轻量 ML 学权重铺垫
 }
 
 export interface PersonaInstance {
   pluginId: string;        // 'mbti' | 'holland' | 'big5' | 'ziwei'
   data: unknown;
+  createdAt: string;
+}
+
+export interface MatchFeedbackRecord {
+  // 定义见 src/core/matchTypes.ts；Phase 4 已预留字段，Phase 8+ 实现 UI + OLS。
+  id: string;
+  jobId: string;
+  resumeId?: string;
+  scoringVersion: string;
+  dimensionScores: Record<string, number>;
+  userRating?: 1 | 2 | 3 | 4 | 5;
+  userAction?: 'save' | 'reject' | 'apply' | 'ignore';
   createdAt: string;
 }
 
@@ -433,6 +518,10 @@ main (始终可发布)
 | Q6 | Tauri 桌面端是否值得 | 看时间预算 | Phase 9 完成后 | ⏳ Open |
 | Q7 | Claude Design 现有设计稿 | 用户提供链接 / 导出 | Phase 7 前 | ⏳ Open |
 | Q8 | 项目主品牌色 / Logo | 暂用 V7.0 紫色 | Phase 7 | ⏳ Open |
+| Q9 | 简历 → preferences 数据流方案 | α（解析后建议同步，不静默覆盖）| Phase 4 收尾 | ⏳ Open |
+| Q10 | 紫微 双主星 schema 改动 | 单星 → `mainStars: string[]`（1-2 长度），plugin id 不变 | Phase 2.6 / Plugin polish | ⏳ Open |
+| Q11 | Phase 4.5 硬筛选标签 UI 何时做 | 用户希望先 Phase 5，故延后 | Phase 5 后 | ⏳ Open |
+| Q12 | MBTI 职业映射的信效度引用 | 引用 Pittenger 1993 critique，明确"辅助参考非诊断" | Phase 2.6 | ⏳ Open |
 
 **已解决**（不再讨论）：
 - ~~Q1: 简历 PII 处理默认策略~~ → 结构化明文（`piiPolicy: 'keep'`） + 原文件不存盘 + 不上云
@@ -455,27 +544,38 @@ main (始终可发布)
 
 ## 11. 接力指令
 
-**当前位置**：Phase 0 / 1 / 2 / 3 ✅ Done，准备进入 **Phase 4（匹配引擎重构）**。
+**当前位置**：Phase 0 / 1 / 2 / 3 ✅ Done，**Phase 4 核心已完成**（scoring engine + match engine + persona 注入 merged via PR #10-14），**正在 smoke-test 收尾**——Codex 在分支上修 A1-A4 那批问题。**Phase 5（Dexie）将合并 A1 数据丢失修复一起做**。
 
 **新 session 第一步**：
-1. 读完本文档全文
-2. 读 `doc/phase-2-notes.md` 与 `doc/phase-3-notes.md` 了解最近代码层和约定
-3. 浏览 `types.ts`、`constants.tsx`、`services/`、`src/personas/`、`src/components/ResumeModal.tsx` 摸清现有范式
-4. **不要写任何代码**，先：
+1. 读完本文档全文（特别是 §4 D1-D10 核心架构决策）。
+2. 读 `doc/scoring-rubric.md` 理解评分系统的 Pass A/B/C 三层架构。
+3. 读 `doc/phase-2-notes.md` / `phase-3-notes.md` / `phase-4-notes.md` 了解每个 Phase 的落地范式和已经验证的代码层约定。
+4. 浏览 `types.ts`、`src/core/`、`services/`、`src/personas/index.ts`、`src/components/ResumeModal.tsx` 摸清现有范式。
+5. **不要写任何代码**，先：
    a. 用清晰友好的中文向用户确认你理解了项目架构（一两段，避免堆术语）
-   b. 提出 Phase 4 的具体拆解（5-8 个 commit，每个写清"干什么 / 触碰文件 / 风险"）
-5. Phase 4 的核心交付：
-   - `src/core/matchEngine.ts` 抽象 `MatchEngine` 类（吃 `MatchContext`）
-   - `buildSystemPrompt(ctx, goal)` 统一替代 `FLASH_FILTER_PROMPT` / `PRO_AUDIT_PROMPT` / `CHAT_SYSTEM_PROMPT`
-   - `buildResponseSchema(ctx, goal)` 按激活的 Persona 动态扩展 schema
-   - Flash 初筛额外吃简历的硬性条件（学历/经验年限/语言要求）
-   - **同时把 Persona 注册入口 `src/personas/index.ts` 建起来** + Profile Modal 加 Persona / 生日 UI（不然 Phase 2 / Phase 3 装配再完美也没数据可用）
+   b. 看 Codex 是否已经 merge Phase 4 smoke-test 修复（`main` HEAD 高于 `8a8e69a` 且 commit message 含 A1/A2/A3/A4 相关 fix）
+   c. 如果已合并 → 提出 Phase 5 拆解（5-7 个 commit，含 A1 根因调查 + Dexie schema + migration + liveQuery 替换 + 简历 Blob 存储 + 验收）
+   d. 如果未合并 → 等 Codex 推完再开 Phase 5，期间可独立做 Phase 2.6 plugin polish（紫微 / MBTI / RIASEC，见 Q9-Q12）
+
+**评分系统的 6 条铁律（一定要记住）**：
+1. LLM 抽证据，代码算分；Gemini 永远不输出 `overall` / `judgment`，schema 不留这两个字段。
+2. `unknown !== 0`：缺失数据进 `confidence: 'unknown'`，不进加权分母。
+3. 降权优先于剔除；`hardFail` 默认 false，只在用户显式打开 `hardFilters.*` 时触发。
+4. `rubricVersion + scoringVersion` 必须随结构变动 bump，写进每条 `MatchScore` 和 `MatchFeedbackRecord`。
+5. Persona 总权重上限 ≤ 15%（`personaWeightCap` 已 clamp）。
+6. `JobCardSnapshot`（卡片粗筛）vs `JobDetail`（完整 audit）两层评分；卡片信息不全时维度数会少。
+
+**隐私 + 合规铁律**：
+1. 简历原文件不上云（PII 红线，D6）。
+2. API Key 不进 repo / 不进扩展包；BYOK 仅当前阶段，Phase 6 起必须后端代理（D5 + D9）。
+3. 浏览器扩展不批量爬，只读已加载卡片 + 用户主动点开的详情（D4'）。
 
 **禁止**：
-- 不要一上来就改代码
-- 不要跳到 Phase 5 之后
-- 不要询问任何已在本文档明确决定的事
+- 不要一上来就改代码。
+- 不要让 LLM 输出最终 score（D7 + scoring-rubric.md §1）。
+- 不要询问任何已在本文档明确决定的事。
+- 不要混用 Codex 本地工作流和 Claude Code 云端工作流（见 §0.0）。
 
 ---
 
-*文档版本 v1.3 · 2026-05-18 · Workflow 拆分更新*
+*文档版本 v1.4 · 2026-05-19 · Phase 4 落地 + smoke-test 反馈 + D4'/D9/D10 决策 + Phase 5 scope 扩展 + 6 条评分铁律*

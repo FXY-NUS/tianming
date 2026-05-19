@@ -11,8 +11,9 @@
 
 1. `doc/agent-workflow.md`：判断运行环境，不混用本地/云端规则。
 2. `claudecode.md`：Claude Code 云端开发 SOP。
-3. `doc/HANDOFF.md`：项目总交接和 Phase 路线。
-4. 当前 Phase notes，例如 Phase 4 期间读 `doc/scoring-rubric.md` 和 `doc/phase-4-notes.md`（如果存在）。
+3. `doc/HANDOFF.md`：项目总交接和 Phase 路线（**§4 D1-D10 + §11 接力指令的 6 条评分铁律 + 隐私合规铁律必读**）。
+4. `doc/scoring-rubric.md`：Phase 4 评分体系细节（Pass A/B/C 三层 + LLM 抽证据 / 代码算分根原则）。
+5. 当前 Phase notes，例如 Phase 4 期间读 `doc/phase-4-notes.md`，Phase 5 期间读 `doc/phase-5-notes.md`（如果存在）。
 
 关键提醒：
 
@@ -34,8 +35,9 @@
   - `services/geminiService.ts`：从 `window.aistudio` API 改为 `getApiKey()` 助手，读 `localStorage` 或 `import.meta.env.VITE_GEMINI_API_KEY`
   - `App.tsx`：`checkApiKey` / `handleSelectKey` 改为本地 prompt + localStorage 方案
 - 本地 `npm run dev` 可正常调用 Gemini API
-- Phase 0 / 1 / 2 / 3 已 merge 进 main：工具链（Tailwind / Zod / RHF / Vitest / ESLint / Prettier / Husky）+ UserContext 三模块数据模型 + Persona 插件系统（4 个插件：MBTI / Holland / Big5 / 紫微斗数）+ 简历上传与多模态解析（多版本管理 + JSON 导出 + Prompt 命理图层条件化）。详见 `doc/HANDOFF.md` §2、`doc/phase-2-notes.md`、`doc/phase-3-notes.md`
-- **当前焦点**：Phase 4 Match Engine + Scoring Engine（LLM 抽证据，代码按版本化 rubric 算分；同时把 Persona / 生日等数据真正接进 Profile Modal UI）
+- Phase 0 / 1 / 2 / 3 / **4 核心** 已 merge 进 main：工具链 + UserContext 数据模型 + Persona 插件系统（4 个）+ 简历上传与多模态解析 + **Match Engine + Scoring Engine**（LLM 抽证据 / 代码算分，Pass A/B/C 三层架构）+ Persona UI 接入。详见 `doc/HANDOFF.md` §2、`doc/phase-2/3/4-notes.md`、`doc/scoring-rubric.md`。
+- `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8+ 浏览器端轻量 ML 学个性化权重铺垫。
+- **当前焦点**：Phase 4 smoke-test 收尾（A1 数据丢失 / A2 简历→preferences 数据流 / A3 薪资 slider / A4 unknown 率），收尾后立刻进 Phase 5（Dexie 存储升级 + 顺手根治 A1）。Codex 在分支上修，Claude Code 不要重复改同一批文件。
 
 ## 三、Tech Stack
 
@@ -55,34 +57,46 @@
 | 0 | V7.0 baseline import + AI Studio 依赖修复 | ✅ Done |
 | 1 | `UserContext` 数据模型重构 + localStorage 迁移脚本 | ✅ Done |
 | 2 | Persona Plugin 系统（MBTI / Holland / Big5 / 紫微斗数隐藏插件）| ✅ Done |
+| 2.6 | Plugin polish（紫微双主星 / MBTI 信效度 / RIASEC 权重）| ⏸ 可并行 |
 | 3 | 简历上传 + Gemini 多模态结构化解析 | ✅ Done |
-| 4 | Match Engine + Scoring Engine（可解释评分 + 统一上下文装配）| ⏳ In Progress |
-| 5 | 存储升级 localStorage → Dexie | |
-| 5.5 | Gemini 多模态截图导入 JD（可选）| |
-| 6 | 浏览器扩展（Manifest V3，主流招聘站 JD 一键采集）| |
+| 4 | Match Engine + Scoring Engine（可解释评分 + 统一上下文装配）| ✅ 核心 / ⏳ smoke-test 收尾 |
+| 5 | 存储升级 localStorage → Dexie（同时根治 Phase 4 A1 数据丢失）| ⏳ 下一步 |
+| 5.5 | Gemini 多模态截图导入 JD（可选）| ⏸ 已搁置 |
+| 6 | 浏览器扩展（MV3）+ 后端代理雏形（API Key 移出前端）| |
 | 7 | UI 整体调整 + 简历多版本管理 | |
-| 8 | 反向利用：Cover Letter 生成 / 简历针对性优化建议 | |
+| 8 | 反向利用：Cover Letter 生成 / 简历针对性优化建议 + Phase 8.x ML 权重学习 | |
 | 9 | 云同步（可选，Supabase/Firebase）| |
 | 10 | PWA + Tauri 桌面端打包 | |
 | 11 | 文档完善 + 部署上线 + Chrome Web Store 上架 | |
 
 ## 五、架构约定
 
-### 数据模型方向（Phase 1 目标）
+### 数据模型当前态
 
 ```ts
 interface UserContext {
-  personas: PersonaInstance[];      // 心理/玄学画像
-  resumes: ResumeProfile[];         // 简历多版本
-  preferences: UserPreferences;     // 薪资/地区/避雷
+  personas: PersonaInstance[];                 // 心理/玄学画像
+  resumes: ResumeProfile[];                    // 简历多版本
+  preferences: UserPreferences;                // 薪资/地区/避雷
   activeResumeId?: string;
   activePersonaIds: string[];
+  feedbackRecords?: MatchFeedbackRecord[];     // Phase 8+ ML 学权重铺垫（已预留）
 }
 ```
 
-## 六、隐私红线（详见 `doc/HANDOFF.md` §7）
+### 评分系统 6 条铁律（Phase 4 落地，长期遵守）
 
-- 永远不 commit `.env.local` / 不硬编码 API Key 到源代码
-- **简历原文件永远不上云**（PII 红线，对应架构决策 D6）；结构化数据可上云但需 PII 脱敏
-- 公网部署前必须引入后端代理（API Key 不能暴露给浏览器）
-- 浏览器扩展不直连 Gemini（扩展包可被反编译，Key 必盗）
+1. **LLM 抽证据，代码算分** — Gemini 永远不输出最终 `overall` 或 `judgment`。
+2. **`unknown !== 0`** — 缺失数据进 `confidence: 'unknown'`，不进加权分母。
+3. **降权 > 剔除** — `hardFail` 默认 false，只在用户显式打开 `hardFilters.*` 才触发。
+4. **rubricVersion + scoringVersion bump** — 任何评分结构变动必须升版号。
+5. **Persona 总权重上限 ≤ 15%** — 玄学不主导决策。
+6. **JobCardSnapshot vs JobDetail 两层** — 卡片粗筛 vs 完整 audit 信息密度不同，对应不同评分目标（`'triage'` vs `'audit'`）。
+
+## 六、隐私红线（详见 `doc/HANDOFF.md` §7 + D4'/D5/D6/D9）
+
+- 永远不 commit `.env.local` / 不硬编码 API Key 到源代码。
+- **简历原文件永远不上云**（PII 红线，对应架构决策 D6）；结构化数据可上云但需 PII 脱敏。
+- 公网部署前必须引入后端代理（API Key 不能暴露给浏览器）。Phase 6 起硬约束（D9）。
+- 浏览器扩展不直连 Gemini（扩展包可被反编译，Key 必盗，D5）。
+- **浏览器扩展不批量爬**：只读当前页已加载卡片 + 用户主动点开的详情；不后台批量自动请求（D4'，防封号 + 合规）。
