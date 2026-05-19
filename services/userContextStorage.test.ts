@@ -5,6 +5,7 @@ import {
   USER_CONTEXT_KEY,
   USER_CONTEXT_V1_KEY,
   loadUserContext,
+  mergeUserContextPatch,
   saveUserContext,
 } from './userContextStorage';
 
@@ -320,5 +321,54 @@ describe('saveUserContext', () => {
     localStorage.setItem(USER_CONTEXT_KEY, JSON.stringify(legacyV2));
 
     expect(loadUserContext().feedbackRecords).toEqual([]);
+  });
+});
+
+describe('mergeUserContextPatch', () => {
+  it('preserves newer context fields when applying a partial patch', () => {
+    const current: UserContext = {
+      ...DEFAULT_USER_CONTEXT,
+      preferences: {
+        ...DEFAULT_USER_CONTEXT.preferences,
+        displayName: 'Current',
+        salaryRange: [5000, 12000],
+      },
+      feedbackRecords: [
+        {
+          id: 'feedback-1',
+          jobId: 'job-1',
+          scoringVersion: 'phase4-scoring-v1',
+          dimensionScores: { skill: 90 },
+          userRating: 5,
+          createdAt: '2026-05-19T00:00:00Z',
+        },
+      ],
+    };
+
+    const merged = mergeUserContextPatch(current, {
+      preferences: { preferredLocations: ['Singapore'] },
+      resumes: [
+        {
+          id: 'resume-1',
+          label: 'Updated resume',
+          structured: current.resumes[0]?.structured ?? {
+            basic: {},
+            education: [],
+            experience: [],
+            skills: { hard: [], soft: [], languages: [], tools: [] },
+            projects: [],
+          },
+          piiPolicy: 'keep',
+          createdAt: '2026-05-19T00:00:00Z',
+        },
+      ],
+      activeResumeId: 'resume-1',
+    });
+
+    expect(merged.preferences.displayName).toBe('Current');
+    expect(merged.preferences.salaryRange).toEqual([5000, 12000]);
+    expect(merged.preferences.preferredLocations).toEqual(['Singapore']);
+    expect(merged.feedbackRecords).toEqual(current.feedbackRecords);
+    expect(merged.activeResumeId).toBe('resume-1');
   });
 });

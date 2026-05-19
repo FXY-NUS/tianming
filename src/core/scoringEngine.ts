@@ -15,7 +15,7 @@ import type {
   SkillEvidence,
 } from './matchTypes';
 
-export const SCORING_VERSION = 'phase4-scoring-v1';
+export const SCORING_VERSION = 'phase4-scoring-v1.1';
 
 export const DEFAULT_SCORING_RUBRIC: ScoringRubric = {
   version: 'rubric-v1',
@@ -277,7 +277,14 @@ function scoreLocation(
   requireLocationFit = false,
 ): DimensionScore {
   const preferredLocations = user.preferences.preferredLocations.filter(Boolean);
-  const locationText = lower((job as JobCardSnapshot).locationText ?? '');
+  const explicitLocation = firstNonEmpty((job as JobCardSnapshot).locationText);
+  const fallbackText = jobText(job);
+  const fallbackMentionsPreferredLocation = preferredLocations.some((location) =>
+    lower(fallbackText).includes(lower(location)),
+  );
+  const locationSourceText =
+    explicitLocation || (fallbackMentionsPreferredLocation ? fallbackText : '');
+  const locationText = lower(locationSourceText);
 
   if (preferredLocations.length === 0) {
     return unknownDimension('location', 'Location fit', 'User has not set preferred locations.');
@@ -304,7 +311,7 @@ function scoreLocation(
     label: 'Location fit',
     score: 35,
     confidence: 'medium',
-    evidence: [`JD location: ${(job as JobCardSnapshot).locationText}`],
+    evidence: [`JD location/source text: ${truncate(locationSourceText)}`],
     warnings: ['Location does not match current preferred locations.'],
     hardFail: requireLocationFit,
   };
@@ -316,7 +323,7 @@ function scoreCompensation(
   requireCompensationFit = false,
 ): DimensionScore {
   const preferredSalary = user.preferences.salaryRange;
-  const salaryText = (job as JobCardSnapshot).salaryText ?? (job as Job).salary_text ?? '';
+  const salaryText = salarySourceText(job);
   const jdSalary = parseSalaryRange(salaryText);
 
   if (!preferredSalary) {
@@ -536,10 +543,36 @@ function jobText(job: Job | JobDetail | JobCardSnapshot): string {
     (job as JobCardSnapshot).salaryText,
     (job as JobCardSnapshot).snippet,
     (job as Job).content,
+    (job as Job).salaryText,
     (job as Job).salary_text,
+    (job as Job).workMode,
   ]
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join('\n');
+}
+
+function salarySourceText(job: Job | JobDetail | JobCardSnapshot): string {
+  const explicitSalary = firstNonEmpty(
+    (job as JobCardSnapshot).salaryText,
+    (job as Job).salaryText,
+    (job as Job).salary_text,
+  );
+  if (explicitSalary) return explicitSalary;
+
+  const text = jobText(job);
+  return /\b(salary|compensation|pay|monthly|month|annual|annum|sgd|usd|rmb|rm)\b|\$|薪|工资|月薪|年薪/i.test(
+    text,
+  )
+    ? text
+    : '';
+}
+
+function firstNonEmpty(...values: Array<string | undefined>): string {
+  return values.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim() ?? '';
+}
+
+function truncate(text: string, maxLength = 160): string {
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
 function clampScore(score: number): number {

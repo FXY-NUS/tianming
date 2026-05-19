@@ -37,7 +37,14 @@ import {
   deepAuditJob,
   sendMessageToJobConsultant,
 } from './services/geminiService';
-import { loadUserContext, saveUserContext } from './services/userContextStorage';
+import {
+  loadUserContext,
+  mergeUserContextPatch,
+  saveUserContext,
+  USER_CONTEXT_KEY,
+  type UserContextPatch,
+} from './services/userContextStorage';
+import { parseSalaryRangeDraft } from './services/preferenceValidation';
 import { ResumeModal } from './src/components/ResumeModal';
 import { PersonaSection } from './src/components/PersonaSection';
 
@@ -59,6 +66,17 @@ const getJobScore = (job: Job): number | undefined =>
   job.matchScore?.overall ??
   job.analysis?.score ??
   job.flashScore;
+
+const getUnknownRatio = (matchScore: Job['matchScore']): number => {
+  if (!matchScore || matchScore.dimensions.length === 0) return 0;
+  const unknownCount = matchScore.dimensions.filter(
+    (dimension) => dimension.confidence === 'unknown' || dimension.score === undefined,
+  ).length;
+  return unknownCount / matchScore.dimensions.length;
+};
+
+const hasInsufficientScoreData = (matchScore: Job['matchScore']): boolean =>
+  getUnknownRatio(matchScore) > 0.5;
 
 const scorePillClass = (score: number | undefined): string => {
   if (score === undefined) return 'bg-slate-200 text-slate-500';
@@ -101,12 +119,43 @@ const App = () => {
   }, []);
 
   useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === USER_CONTEXT_KEY) {
+        setUserCtx(loadUserContext());
+      }
+
+      if (event.key === LOCAL_STORAGE_KEY_JOBS) {
+        try {
+          setJobs(event.newValue ? JSON.parse(event.newValue) : []);
+        } catch {
+          // Keep current in-memory jobs if another tab writes malformed data.
+        }
+      }
+
+      if (event.key === LOCAL_STORAGE_KEY_USAGE) {
+        try {
+          setUsage(event.newValue ? JSON.parse(event.newValue) : { flash: 0, pro: 0 });
+        } catch {
+          // Keep current usage if another tab writes malformed data.
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY_JOBS, JSON.stringify(jobs));
   }, [jobs]);
 
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY_USAGE, JSON.stringify(usage));
   }, [usage]);
+
+  useEffect(() => {
+    saveUserContext(userCtx);
+  }, [userCtx]);
 
   const handleSelectKey = async () => {
     const current = localStorage.getItem('GEMINI_API_KEY') || '';
@@ -121,9 +170,29 @@ const App = () => {
     setUsage((prev) => ({ ...prev, [type]: prev[type] + 1 }));
   };
 
+  const persistUserContext = (
+    patchOrUpdater: UserContextPatch | ((current: UserContext) => UserContextPatch),
+  ) => {
+    setUserCtx((current) => {
+      const patch = typeof patchOrUpdater === 'function' ? patchOrUpdater(current) : patchOrUpdater;
+      return mergeUserContextPatch(current, patch);
+    });
+  };
+
   const saveProfileData = (updated: UserContext) => {
-    setUserCtx(updated);
-    saveUserContext(updated);
+    const salaryResult = parseSalaryRangeDraft(salaryMinDraft, salaryMaxDraft);
+    if (salaryResult.status === 'error') {
+      setSalaryRangeError(salaryResult.message);
+      return;
+    }
+
+    persistUserContext({
+      ...updated,
+      preferences: {
+        ...updated.preferences,
+        salaryRange: salaryResult.salaryRange,
+      },
+    });
     setShowProfileModal(false);
   };
 
@@ -231,6 +300,7 @@ const App = () => {
         const newJobsData: Job[] = [];
         raw.forEach((item: any) => {
           const content = item.scraped_content || item.content || '';
+          const salaryText = item.salaryText || item.salary_text || '';
           const title = (
             item.title?.trim() ||
             content.split('\n')[0].substring(0, 50).trim() ||
@@ -245,7 +315,10 @@ const App = () => {
               company,
               url: item.url || '',
               content,
-              salary_text: item.salary_text || '面议',
+              salary_text: salaryText || '面议',
+              salaryText,
+              locationText: item.locationText || item.location_text || item.location || '',
+              workMode: item.workMode || item.work_mode || item.mode || '',
               status: 'New',
               tags: [],
               chatHistory: [],
@@ -333,8 +406,14 @@ const App = () => {
   // Local edit state for profile modal
   const [editCtx, setEditCtx] = useState<UserContext>(userCtx);
   const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
+  const [salaryMinDraft, setSalaryMinDraft] = useState('');
+  const [salaryMaxDraft, setSalaryMaxDraft] = useState('');
+  const [salaryRangeError, setSalaryRangeError] = useState('');
   const openProfileModal = () => {
     setEditCtx(userCtx);
+    setSalaryMinDraft(userCtx.preferences.salaryRange?.[0]?.toString() ?? '');
+    setSalaryMaxDraft(userCtx.preferences.salaryRange?.[1]?.toString() ?? '');
+    setSalaryRangeError('');
     setProfileTab('profile');
     setShowProfileModal(true);
   };
@@ -347,28 +426,17 @@ const App = () => {
   };
 
   const updateSalaryRange = (bound: 'min' | 'max', rawValue: string) => {
-    const value = rawValue === '' ? undefined : Number(rawValue);
-    setEditCtx((prev) => {
-      if (value === undefined || !Number.isFinite(value)) {
-        return {
-          ...prev,
-          preferences: { ...prev.preferences, salaryRange: undefined },
-        };
-      }
-
-      const current = prev.preferences.salaryRange;
-      const min = bound === 'min' ? value : (current?.[0] ?? value);
-      const max = bound === 'max' ? value : (current?.[1] ?? value);
-      const salaryRange: [number, number] = [Math.min(min, max), Math.max(min, max)];
-
-      return {
-        ...prev,
-        preferences: { ...prev.preferences, salaryRange },
-      };
-    });
+    if (bound === 'min') {
+      setSalaryMinDraft(rawValue);
+    } else {
+      setSalaryMaxDraft(rawValue);
+    }
+    setSalaryRangeError('');
   };
 
   const selectedMatchScore = selectedJob?.analysis?.matchScore ?? selectedJob?.matchScore;
+  const selectedHasInsufficientData = hasInsufficientScoreData(selectedMatchScore);
+  const selectedUnknownPercent = Math.round(getUnknownRatio(selectedMatchScore) * 100);
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
@@ -479,6 +547,8 @@ const App = () => {
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 no-scrollbar">
           {processedJobs.map((job) => {
             const displayScore = getJobScore(job);
+            const cardMatchScore = job.analysis?.matchScore ?? job.matchScore;
+            const cardHasInsufficientData = hasInsufficientScoreData(cardMatchScore);
             return (
               <div
                 key={job.id}
@@ -497,7 +567,15 @@ const App = () => {
                       size={16}
                       className={`transition-colors ${job.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200 group-hover:text-slate-300'}`}
                     />
-                    {displayScore !== undefined && (
+                    {displayScore !== undefined && cardHasInsufficientData && (
+                      <span
+                        title="超过一半评分维度仍是 unknown"
+                        className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"
+                      >
+                        信息不足
+                      </span>
+                    )}
+                    {displayScore !== undefined && !cardHasInsufficientData && (
                       <span
                         className={`text-[10px] font-black px-1.5 py-0.5 rounded ${scorePillClass(displayScore)}`}
                       >
@@ -622,10 +700,12 @@ const App = () => {
                       <div className="flex items-center gap-10 relative z-10">
                         <div className="text-center shrink-0">
                           <div className="text-8xl font-black text-yellow-400">
-                            {selectedJob.analysis.score ?? '—'}
+                            {selectedHasInsufficientData
+                              ? '—'
+                              : (selectedJob.analysis.score ?? '—')}
                           </div>
                           <div className="text-[10px] font-black tracking-[0.3em] text-indigo-400 mt-2">
-                            DESTINY SCORE
+                            {selectedHasInsufficientData ? 'DATA LIMITED' : 'DESTINY SCORE'}
                           </div>
                         </div>
                         <div className="space-y-4">
@@ -659,6 +739,12 @@ const App = () => {
                             {selectedMatchScore.rubricVersion} / {selectedMatchScore.scoringVersion}
                           </span>
                         </div>
+                        {selectedHasInsufficientData && (
+                          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold leading-relaxed text-amber-800">
+                            信息不足：{selectedUnknownPercent}% 的评分维度仍是
+                            unknown。本结果适合做线索排查，不适合当作确定排序。
+                          </div>
+                        )}
                         <div className="grid gap-3 md:grid-cols-2">
                           {selectedMatchScore.dimensions.map((dimension) => (
                             <div
@@ -947,7 +1033,7 @@ const App = () => {
                       </label>
                       <input
                         type="number"
-                        value={editCtx.preferences.salaryRange?.[0] ?? ''}
+                        value={salaryMinDraft}
                         onChange={(e) => updateSalaryRange('min', e.target.value)}
                         className="w-full border-2 border-slate-100 p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
                       />
@@ -958,12 +1044,17 @@ const App = () => {
                       </label>
                       <input
                         type="number"
-                        value={editCtx.preferences.salaryRange?.[1] ?? ''}
+                        value={salaryMaxDraft}
                         onChange={(e) => updateSalaryRange('max', e.target.value)}
                         className="w-full border-2 border-slate-100 p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
                   </div>
+                  {salaryRangeError && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
+                      {salaryRangeError}
+                    </div>
+                  )}
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-4">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
@@ -1032,8 +1123,13 @@ const App = () => {
         onClose={() => setShowResumeModal(false)}
         ctx={userCtx}
         onSave={(newCtx) => {
-          setUserCtx(newCtx);
-          saveUserContext(newCtx);
+          persistUserContext({
+            resumes: newCtx.resumes,
+            activeResumeId: newCtx.activeResumeId,
+          });
+        }}
+        onApplyProfileSuggestions={(preferences) => {
+          persistUserContext({ preferences });
         }}
       />
     </div>

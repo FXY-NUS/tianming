@@ -131,7 +131,7 @@ Phase 4 只预留 `MatchFeedbackRecord`，不训练模型。
 
 **v1 rubric 阶段**（当前）：
 - `DEFAULT_SCORING_RUBRIC` 用工程经验权重，不宣称统计学真值。
-- 所有 `MatchScore` 写入 `rubricVersion: 'rubric-v1'` 和 `scoringVersion: 'phase4-scoring-v1'`。
+- 所有 `MatchScore` 写入 `rubricVersion: 'rubric-v1'` 和当前 `scoringVersion`。Phase 4.5 的 location / salary fallback 后为 `phase4-scoring-v1.1`。
 
 **Phase 8.x ML 阶段**（未实现）：
 - 用户在 UI 给 JD 打 1-5 星或做 `save / reject / apply / ignore` 行为，自动写入 `feedbackRecords`。

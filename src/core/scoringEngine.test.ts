@@ -181,6 +181,57 @@ describe('scoringEngine', () => {
     expect(compensation?.hardFail).toBeFalsy();
   });
 
+  it('falls back to JD content when matching preferred locations', () => {
+    const user = makeUser({
+      preferences: {
+        ...makeUser().preferences,
+        preferredLocations: ['Singapore'],
+      },
+    });
+    const job = makeJob({ content: 'This hybrid role is based in Singapore.' });
+
+    const dimensions = buildRuleDimensions(job, user);
+    const location = dimensions.find((dimension) => dimension.key === 'location');
+
+    expect(location?.score).toBe(100);
+    expect(location?.confidence).toBe('high');
+  });
+
+  it('keeps location unknown when no explicit location or preferred fallback is present', () => {
+    const user = makeUser({
+      preferences: {
+        ...makeUser().preferences,
+        preferredLocations: ['Singapore'],
+      },
+    });
+    const job = makeJob({ content: 'This role supports analytics dashboards.' });
+
+    const dimensions = buildRuleDimensions(job, user);
+    const location = dimensions.find((dimension) => dimension.key === 'location');
+
+    expect(location?.score).toBeUndefined();
+    expect(location?.confidence).toBe('unknown');
+  });
+
+  it('falls back to JD content when parsing salary text', () => {
+    const user = makeUser({
+      preferences: {
+        ...makeUser().preferences,
+        salaryRange: [1000, 3000],
+      },
+    });
+    const job = makeJob({
+      salary_text: '',
+      content: 'Compensation: SGD 1.5k - 2.5k monthly.',
+    });
+
+    const dimensions = buildRuleDimensions(job, user);
+    const compensation = dimensions.find((dimension) => dimension.key === 'compensation');
+
+    expect(compensation?.score).toBe(50);
+    expect(compensation?.confidence).toBe('medium');
+  });
+
   it('estimates resume years from structured experience periods', () => {
     const snapshot = estimateResumeYears(makeUser().resumes[0]);
 
