@@ -112,19 +112,52 @@ export function extractEvidenceFromRecord(
   if (!evidenceKeys.some((key) => key in record)) return undefined;
 
   const candidate: ExtractedEvidence = {
-    matchedSkills: Array.isArray(record.matchedSkills) ? record.matchedSkills : [],
-    missingSkills: Array.isArray(record.missingSkills) ? record.missingSkills : [],
-    transferableSkills: Array.isArray(record.transferableSkills) ? record.transferableSkills : [],
-    cultureSignals: Array.isArray(record.cultureSignals) ? record.cultureSignals : [],
-    growthReasons: Array.isArray(record.growthReasons) ? record.growthReasons : [],
-    personaReasons: Array.isArray(record.personaReasons) ? record.personaReasons : [],
-  } as ExtractedEvidence;
+    matchedSkills: normalizeSkillEvidenceArray(record.matchedSkills),
+    missingSkills: normalizeSkillEvidenceArray(record.missingSkills),
+    transferableSkills: normalizeSkillEvidenceArray(record.transferableSkills),
+    cultureSignals: normalizeStringArray(record.cultureSignals),
+    growthReasons: normalizeStringArray(record.growthReasons),
+    personaReasons: normalizeStringArray(record.personaReasons),
+  };
 
   if (typeof record.cultureScore === 'number') candidate.cultureScore = record.cultureScore;
   if (typeof record.growthScore === 'number') candidate.growthScore = record.growthScore;
   if (typeof record.personaScore === 'number') candidate.personaScore = record.personaScore;
 
   return isExtractedEvidence(candidate) ? candidate : undefined;
+}
+
+function normalizeSkillEvidenceArray(value: unknown): SkillEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === 'string' && item.trim()) {
+      return [{ skill: item.trim(), priority: 'unknown' as const }];
+    }
+
+    const record = asRecord(item);
+    if (!record || typeof record.skill !== 'string' || !record.skill.trim()) return [];
+
+    const priority =
+      record.priority === 'must' || record.priority === 'preferred' || record.priority === 'unknown'
+        ? record.priority
+        : 'unknown';
+
+    const skillEvidence: SkillEvidence = {
+      skill: record.skill.trim(),
+      priority,
+    };
+
+    if (typeof record.evidence === 'string' && record.evidence.trim()) {
+      skillEvidence.evidence = record.evidence.trim();
+    }
+
+    return [skillEvidence];
+  });
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => (typeof item === 'string' && item.trim() ? [item.trim()] : []));
 }
 
 export function isDeepAuditNarrative(value: unknown): value is DeepAuditNarrative {

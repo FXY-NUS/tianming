@@ -142,7 +142,9 @@ export function defineEvidenceSchema() {
       'missingSkills',
       'transferableSkills',
       'cultureSignals',
+      'cultureScore',
       'growthReasons',
+      'growthScore',
     ],
   };
 }

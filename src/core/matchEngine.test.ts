@@ -118,4 +118,34 @@ describe('matchEngine', () => {
       result?.matchScore.dimensions.find((dimension) => dimension.key === 'skill')?.score,
     ).toBeUndefined();
   });
+
+  it('normalizes loose Gemini evidence instead of dropping the whole evidence block', () => {
+    const result = scoreDeepAuditRecord(
+      {
+        summary: 'Narrative',
+        hexagram: '',
+        detailed_analysis: { pros: [], cons: [] },
+        cruel_truth_2026: 'Grounded outlook.',
+        career_growth: 'Analytics path.',
+        interview_tactics: 'Lead with SQL.',
+        contract_red_flags: 'Check overtime.',
+        matchedSkills: ['Python', { skill: 'SQL', priority: 'required' }],
+        missingSkills: [],
+        transferableSkills: [],
+        cultureSignals: ['Structured analytics team'],
+        growthReasons: ['Clear analyst progression'],
+      },
+      job,
+      user,
+    );
+
+    expect(result?.evidenceStatus).toBe('ok');
+    expect(result?.extractedEvidence?.matchedSkills).toEqual([
+      { skill: 'Python', priority: 'unknown' },
+      { skill: 'SQL', priority: 'unknown' },
+    ]);
+    expect(
+      result?.matchScore.dimensions.find((dimension) => dimension.key === 'culture')?.score,
+    ).toBe(60);
+  });
 });

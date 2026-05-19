@@ -15,7 +15,7 @@ import type {
   SkillEvidence,
 } from './matchTypes';
 
-export const SCORING_VERSION = 'phase4-scoring-v1.1';
+export const SCORING_VERSION = 'phase4-scoring-v1.2';
 
 export const DEFAULT_SCORING_RUBRIC: ScoringRubric = {
   version: 'rubric-v1',
@@ -428,6 +428,17 @@ function scoreDirectEvidence(
   evidence: string[],
 ): DimensionScore {
   if (typeof score !== 'number') {
+    if (evidence.length > 0) {
+      return {
+        key,
+        label,
+        score: 60,
+        confidence: 'low',
+        evidence,
+        warnings: [`${label} score was not returned; using a low-confidence evidence fallback.`],
+      };
+    }
+
     return unknownDimension(
       key,
       label,

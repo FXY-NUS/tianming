@@ -1,0 +1,12 @@
+{
+  "name": "Tianming",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "postCreateCommand": "npm ci",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Tianming dev server",
+      "onAutoForward": "notify"
+    }
+  }
+}
