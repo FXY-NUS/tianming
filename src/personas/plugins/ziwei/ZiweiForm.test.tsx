@@ -101,3 +101,107 @@ describe('ZiweiForm — 副主星 UI', () => {
     expect(lastCall.ming.mainStars).toEqual(['天府']);
   });
 });
+
+describe('ZiweiForm — 文墨天机 importer', () => {
+  const VALID_CHART = String.raw`文墨天机紫微斗数命盘
+├安星码 : C5VUC
+├基本信息
+│ └身主:天机; 命主:文曲
+├命盘十二宫
+│ ├命  宫[辛卯][来因]
+│ │ ├主星 : 天府[得]
+│ │ ├辅星 : 无
+│ │ ├小星 : 无
+│ │ ├大限 : 3~12虚岁
+│ │ ├小限 : 5虚岁
+│ │ └流年 : 11虚岁
+│ ├夫妻宫[辛丑]
+│ │ ├主星 : 紫微[庙][↑科],破军[旺]
+│ │ ├辅星 : 无
+│ │ ├小星 : 无
+│ │ ├大限 : 103虚岁
+│ │ ├小限 : 7虚岁
+│ │ └流年 : 9虚岁
+│ ├官禄宫[乙未]
+│ │ ├主星 : 天相[得]
+│ │ ├辅星 : 无
+│ │ ├小星 : 无
+│ │ ├大限 : 43虚岁
+│ │ ├小限 : 1虚岁
+│ │ └流年 : 3虚岁
+│ └财帛宫[己亥]
+│   ├主星 : 无
+│   ├辅星 : 无
+│   ├小星 : 无
+│   ├大限 : 83虚岁
+│   ├小限 : 9虚岁
+│   └流年 : 7虚岁`;
+
+  it('renders the importer panel as a collapsed details', () => {
+    renderForm();
+    expect(screen.getByText(/从文墨天机命盘导入/u)).toBeDefined();
+    expect(screen.getByRole('button', { name: '解析' })).toBeDefined();
+  });
+
+  it('shows an error when parsing fails', () => {
+    renderForm();
+    const textarea = screen.getByLabelText('文墨天机命盘原文') as HTMLTextAreaElement;
+    // Intentionally avoid the strings "文墨天机" / "紫微斗数命盘" so the header
+    // check fails first instead of falling through to palace extraction.
+    fireEvent.change(textarea, { target: { value: '随便贴一段东西。' } });
+    fireEvent.click(screen.getByRole('button', { name: '解析' }));
+
+    expect(screen.getByText(/解析失败/u)).toBeDefined();
+    // The error message must mention the failure kind so the user can debug.
+    expect(screen.getByText(/未识别到文墨天机紫微斗数命盘标题/u)).toBeDefined();
+  });
+
+  it('shows a preview with the 4 required palaces on successful parse', () => {
+    const { container } = renderForm();
+    const textarea = screen.getByLabelText('文墨天机命盘原文') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: VALID_CHART } });
+    fireEvent.click(screen.getByRole('button', { name: '解析' }));
+
+    expect(screen.getByText(/解析成功/u)).toBeDefined();
+    // The preview wraps the palace label and the parsed inline in separate
+    // nodes, so we compare against the container's full text content.
+    const text = container.textContent ?? '';
+    expect(text).toContain('命宫');
+    expect(text).toContain('天府[得]');
+    expect(text).toContain('紫微[庙] + 破军[旺]');
+    expect(text).toContain('天相[得]');
+    expect(text).toContain('空宫');
+    expect(screen.getByRole('button', { name: '应用到表单' })).toBeDefined();
+  });
+
+  it('merges parsed data into the form when 应用 is clicked, preserving liunian', () => {
+    const { onChange, value } = renderForm({
+      liunian: { mainStars: ['天机'], sihua: '化禄' },
+      liunianYear: '2026 丙午',
+    });
+    expect(value.liunian?.mainStars).toEqual(['天机']);
+
+    const textarea = screen.getByLabelText('文墨天机命盘原文') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: VALID_CHART } });
+    fireEvent.click(screen.getByRole('button', { name: '解析' }));
+    fireEvent.click(screen.getByRole('button', { name: '应用到表单' }));
+
+    const applied = onChange.mock.calls.at(-1)?.[0] as ZiweiData;
+    expect(applied.ming.mainStars).toEqual(['天府']);
+    expect(applied.fuqi.mainStars).toEqual(['紫微', '破军']);
+    expect(applied.caibo.mainStars).toEqual(['空宫']);
+    // 流年 fields preserved from existing form state.
+    expect(applied.liunian?.mainStars).toEqual(['天机']);
+    expect(applied.liunianYear).toBe('2026 丙午');
+  });
+
+  it('clears the textarea after a successful apply', () => {
+    renderForm();
+    const textarea = screen.getByLabelText('文墨天机命盘原文') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: VALID_CHART } });
+    fireEvent.click(screen.getByRole('button', { name: '解析' }));
+    fireEvent.click(screen.getByRole('button', { name: '应用到表单' }));
+
+    expect(textarea.value).toBe('');
+  });
+});

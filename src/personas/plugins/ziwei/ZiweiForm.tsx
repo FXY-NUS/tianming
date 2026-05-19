@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import { useState, type FC } from 'react';
 import type { PersonaFormProps } from '../../PersonaPlugin';
 import {
   OPTIONAL_PALACES,
@@ -14,6 +14,7 @@ import {
   type ZiweiPalace,
   type ZiweiSihua,
 } from './schema';
+import { parseWenmoChart, type WenmoParseResult } from './parseWenmo';
 
 interface PalaceRowProps {
   label: string;
@@ -175,6 +176,123 @@ const PalaceRow: FC<PalaceRowProps> = ({ label, hint, required, value, onChange,
   );
 };
 
+interface WenmoImporterProps {
+  current: ZiweiData;
+  onApply: (next: ZiweiData) => void;
+}
+
+const WenmoImporter: FC<WenmoImporterProps> = ({ current, onApply }) => {
+  const [text, setText] = useState('');
+  const [result, setResult] = useState<WenmoParseResult | null>(null);
+
+  const handleParse = () => {
+    setResult(parseWenmoChart(text));
+  };
+
+  const handleReset = () => {
+    setText('');
+    setResult(null);
+  };
+
+  const handleApply = () => {
+    if (!result || result.status !== 'ok') return;
+    // Merge: import provides the 4 required palaces + optional 身宫 + global
+    // note. 流年宫 / liunianYear are year-specific and not in the export, so
+    // we preserve the user's existing values for those.
+    const next: ZiweiData = {
+      ...current,
+      ming: result.data.ming,
+      guanlu: result.data.guanlu,
+      caibo: result.data.caibo,
+      fuqi: result.data.fuqi,
+      shen: result.data.shen ?? current.shen,
+      note: result.data.note ?? current.note,
+    };
+    onApply(next);
+    handleReset();
+  };
+
+  return (
+    <details className="rounded-xl border-2 border-indigo-100 bg-indigo-50/50 p-3">
+      <summary className="cursor-pointer text-sm font-semibold text-indigo-700">
+        📋 从文墨天机命盘导入（一键填入核心宫位）
+      </summary>
+      <div className="mt-3 space-y-2 text-xs text-slate-600">
+        <p>
+          在文墨天机 App 内打开命盘 → 复制整段命盘文本 → 粘贴到下方。 解析完全在浏览器内进行，不调用
+          LLM。
+        </p>
+        <textarea
+          className="h-32 w-full rounded-lg border-2 border-white bg-white p-2 font-mono text-xs focus:border-indigo-500 focus:outline-none"
+          placeholder="文墨天机紫微斗数命盘 ...（含「├主星」「├安星码」等树形结构）"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          aria-label="文墨天机命盘原文"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleParse}
+            disabled={!text.trim()}
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            解析
+          </button>
+          {result && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100"
+            >
+              清空
+            </button>
+          )}
+        </div>
+        {result?.status === 'error' && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700">
+            <span className="font-semibold">解析失败 · {result.kind}</span>
+            <p className="mt-1">{result.message}</p>
+          </div>
+        )}
+        {result?.status === 'ok' && (
+          <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-emerald-800">
+            <div className="font-semibold">解析成功，将填入：</div>
+            <ul className="space-y-1 pl-4">
+              {Object.entries(result.preview.schema).map(([key, line]) => (
+                <li key={key} className="list-disc">
+                  <span className="font-semibold">{PALACE_LABEL[key as PalaceKey]}</span>：{line}
+                </li>
+              ))}
+            </ul>
+            {result.preview.metadata.length > 0 && (
+              <div className="text-slate-600">
+                元信息 → 全局备注：{result.preview.metadata.join('；')}
+              </div>
+            )}
+            {result.preview.nonSchemaPalaces.length > 0 && (
+              <div className="text-slate-600">
+                其他 {result.preview.nonSchemaPalaces.length} 个宫位摘要将合并进全局备注。
+              </div>
+            )}
+            {result.warnings.length > 0 && (
+              <div className="rounded border border-amber-300 bg-amber-50 p-1.5 text-amber-700">
+                ⚠ {result.warnings.join('；')}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleApply}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+            >
+              应用到表单
+            </button>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+};
+
 export function ZiweiForm({ value, onChange }: PersonaFormProps<ZiweiData>) {
   const setPalace = (key: PalaceKey, next: ZiweiPalace | undefined) => {
     onChange({ ...value, [key]: next });
@@ -184,8 +302,10 @@ export function ZiweiForm({ value, onChange }: PersonaFormProps<ZiweiData>) {
     <div className="space-y-3">
       <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
         紫微斗数 plugin 会在每次匹配时往 Gemini Pro 注入 ~400 token。
-        如果你不熟悉自己的星盘，下一版本会加「从文墨天机粘贴导入」按钮。
+        手动填写或从下方「从文墨天机导入」一键填入核心宫位。
       </div>
+
+      <WenmoImporter current={value} onApply={onChange} />
 
       {REQUIRED_PALACES.map((key) => (
         <PalaceRow
