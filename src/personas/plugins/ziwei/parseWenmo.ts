@@ -352,10 +352,12 @@ function parseMainStarsLine(line: string): ParsedStarsLine {
 
 function parseStarToken(token: string): { star: string; annotations: string[] } | undefined {
   const bracketStart = token.indexOf('[');
-  if (bracketStart === -1) {
-    return { star: token.trim(), annotations: [] };
-  }
-  const star = token.slice(0, bracketStart).trim();
+  // Strip ALL whitespace from the star name, not just trim. Wenmo outputs and
+  // human pastes sometimes insert spacing for visual alignment (e.g. "天   相"
+  // or "命  宫"); we treat those as equivalent to the canonical form.
+  const rawStar = bracketStart === -1 ? token : token.slice(0, bracketStart);
+  const star = rawStar.replace(/\s+/g, '');
+  if (!star) return undefined;
   const annotations: string[] = [];
   const re = /\[([^\]]+)\]/g;
   let match: RegExpExecArray | null;

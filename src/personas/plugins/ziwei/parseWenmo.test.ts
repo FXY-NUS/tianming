@@ -297,6 +297,49 @@ describe('parseWenmoChart — palace-level edge cases', () => {
     expect(result.data.guanlu.mainStarStrengths).toEqual(['陷']);
   });
 
+  it('normalises whitespace inside star names ("天   相" → "天相")', () => {
+    const chart = String.raw`文墨天机紫微斗数命盘
+│
+├命盘十二宫
+│ ├命宫[甲子][来因]
+│ │ ├主星 : 天府[得]
+│ │ ├辅星 : 无
+│ │ ├小星 : 无
+│ │ ├大限 : 1~10虚岁
+│ │ ├小限 : 1虚岁
+│ │ └流年 : 1虚岁
+│ ├官禄宫[乙丑]
+│ │ ├主星 : 天   相[得]
+│ │ ├辅星 : 无
+│ │ ├小星 : 无
+│ │ ├大限 : 11~20虚岁
+│ │ ├小限 : 2虚岁
+│ │ └流年 : 2虚岁
+│ ├财帛宫[丙寅]
+│ │ ├主星 : 武曲[利]
+│ │ ├辅星 : 无
+│ │ ├小星 : 无
+│ │ ├大限 : 21~30虚岁
+│ │ ├小限 : 3虚岁
+│ │ └流年 : 3虚岁
+│ └夫妻宫[丁卯]
+│   ├主星 : 紫 微[庙], 破  军[旺]
+│   ├辅星 : 无
+│   ├小星 : 无
+│   ├大限 : 31~40虚岁
+│   ├小限 : 4虚岁
+│   └流年 : 4虚岁`;
+    const result = parseWenmoChart(chart);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    // Single-star palace: "天   相" recovers as 天相, not 空宫.
+    expect(result.data.guanlu.mainStars).toEqual(['天相']);
+    expect(result.data.guanlu.mainStarStrengths).toEqual(['得']);
+    // Double-star palace: both stars with internal whitespace normalise.
+    expect(result.data.fuqi.mainStars).toEqual(['紫微', '破军']);
+    expect(result.data.fuqi.mainStarStrengths).toEqual(['庙', '旺']);
+  });
+
   it('emits warnings when a required palace is missing in the source', () => {
     // No 官禄宫 in this stripped chart.
     const chart = String.raw`文墨天机紫微斗数命盘
