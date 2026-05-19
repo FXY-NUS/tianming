@@ -290,4 +290,35 @@ describe('saveUserContext', () => {
     expect(localStorage.getItem(USER_CONTEXT_KEY)).not.toBeNull();
     expect(localStorage.getItem(USER_CONTEXT_V1_KEY)).toBeNull();
   });
+
+  it('round-trips feedbackRecords for future ML weight learning', () => {
+    const ctx: UserContext = {
+      ...DEFAULT_USER_CONTEXT,
+      feedbackRecords: [
+        {
+          id: 'fb-1',
+          jobId: 'job-1',
+          resumeId: 'resume-1',
+          scoringVersion: 'phase4-scoring-v1',
+          dimensionScores: { skill: 80, growth: 70 },
+          userRating: 4,
+          userAction: 'save',
+          createdAt: '2026-05-19T00:00:00Z',
+        },
+      ],
+    };
+
+    saveUserContext(ctx);
+
+    expect(loadUserContext().feedbackRecords).toEqual(ctx.feedbackRecords);
+  });
+
+  it('back-fills feedbackRecords to an empty array for older v2 contexts', () => {
+    // Simulate a context saved before feedbackRecords was reserved.
+    const legacyV2 = { ...DEFAULT_USER_CONTEXT } as Omit<UserContext, 'feedbackRecords'>;
+    delete (legacyV2 as Partial<UserContext>).feedbackRecords;
+    localStorage.setItem(USER_CONTEXT_KEY, JSON.stringify(legacyV2));
+
+    expect(loadUserContext().feedbackRecords).toEqual([]);
+  });
 });

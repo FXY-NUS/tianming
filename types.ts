@@ -1,4 +1,4 @@
-import type { ExtractedEvidence, MatchScore } from './src/core/matchTypes';
+import type { ExtractedEvidence, MatchFeedbackRecord, MatchScore } from './src/core/matchTypes';
 
 export interface Job {
   id: string;
@@ -122,6 +122,9 @@ export interface UserContext {
   preferences: UserPreferences;
   activeResumeId?: string;
   activePersonaIds: string[];
+  // Reserved for Phase 8+ lightweight ML: user-supplied ratings + observed actions
+  // per scored JD. Optional so older saved contexts keep loading.
+  feedbackRecords?: MatchFeedbackRecord[];
 }
 
 // Legacy type kept only for migration reading — do not use in new code

@@ -188,6 +188,104 @@ describe('scoringEngine', () => {
     expect(snapshot.confidence).toBe('medium');
   });
 
+  it('estimates partial years from YYYY-MM style periods', () => {
+    const user = makeUser({
+      resumes: [
+        {
+          id: 'resume-month',
+          label: 'Month-level',
+          structured: {
+            ...emptyStructured,
+            experience: [
+              { company: 'X', title: 'Intern', period: '2023.06 - 2024.03', bullets: [] },
+            ],
+          },
+          piiPolicy: 'keep',
+          createdAt: '2026-05-19T00:00:00Z',
+        },
+      ],
+      activeResumeId: 'resume-month',
+    });
+
+    const snapshot = estimateResumeYears(user.resumes[0]);
+
+    expect(snapshot.estimatedYears).toBe(0.8);
+  });
+
+  it('does not hard fail on seniority-only titles when resume years are unknown', () => {
+    const userWithoutPeriod = makeUser({
+      resumes: [
+        {
+          id: 'resume-unknown',
+          label: 'No periods',
+          structured: emptyStructured, // no experience entries -> estimatedYears undefined
+          piiPolicy: 'keep',
+          createdAt: '2026-05-19T00:00:00Z',
+        },
+      ],
+      activeResumeId: 'resume-unknown',
+    });
+
+    const score = buildMatchScore({
+      job: makeJob({ content: 'Senior data scientist on a strong analytics team.' }),
+      user: userWithoutPeriod,
+      goal: 'audit',
+      evidence,
+      hardFilters: { requireExperienceFit: true },
+    });
+
+    const experience = score.dimensions.find((dimension) => dimension.key === 'experience');
+    expect(experience?.hardFail).toBe(false);
+    expect(score.hardRejected).toBe(false);
+  });
+
+  it('hard fails seniority-only titles only when resume years are clearly below the floor', () => {
+    const score = buildMatchScore({
+      job: makeJob({ content: 'Senior data scientist on a strong analytics team.' }),
+      user: makeUser(), // estimatedYears = 1 (from '2024-2025'), well below floor of 3
+      goal: 'audit',
+      evidence,
+      hardFilters: { requireExperienceFit: true },
+    });
+
+    const experience = score.dimensions.find((dimension) => dimension.key === 'experience');
+    expect(experience?.hardFail).toBe(true);
+    expect(score.hardRejected).toBe(true);
+  });
+
+  it('does not hard fail seniority-only titles when resume years clear the floor', () => {
+    const seniorUser = makeUser({
+      resumes: [
+        {
+          id: 'resume-senior',
+          label: 'Senior',
+          structured: {
+            ...emptyStructured,
+            experience: [
+              { company: 'A', title: 'DS', period: '2020-2026', bullets: [] }, // ~6 years
+            ],
+          },
+          piiPolicy: 'keep',
+          createdAt: '2026-05-19T00:00:00Z',
+        },
+      ],
+      activeResumeId: 'resume-senior',
+    });
+
+    const score = buildMatchScore({
+      job: makeJob({ content: 'Senior data scientist on a strong analytics team.' }),
+      user: seniorUser,
+      goal: 'audit',
+      evidence,
+      hardFilters: { requireExperienceFit: true },
+    });
+
+    const experience = score.dimensions.find((dimension) => dimension.key === 'experience');
+    expect(experience?.hardFail).toBe(false);
+    expect(experience?.score).toBeGreaterThanOrEqual(70);
+    expect(score.hardRejected).toBe(false);
+  });
+
   it('clamps persona rubric weight to the configured cap', () => {
     const rubric: ScoringRubric = {
       version: 'test',

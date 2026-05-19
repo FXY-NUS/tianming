@@ -17,6 +17,7 @@ export const DEFAULT_USER_CONTEXT: UserContext = {
   },
   activeResumeId: undefined,
   activePersonaIds: [],
+  feedbackRecords: [],
 };
 
 function migrateFromLegacy(raw: string): UserContext {
@@ -144,20 +145,25 @@ function migrateFromV1(raw: string): UserContext {
   };
 }
 
+function withReservedFields(ctx: UserContext): UserContext {
+  if (Array.isArray(ctx.feedbackRecords)) return ctx;
+  return { ...ctx, feedbackRecords: [] };
+}
+
 export function loadUserContext(): UserContext {
   try {
     // Tier 1: v2 (current)
     const v2 = localStorage.getItem(USER_CONTEXT_KEY);
     if (v2) {
       const parsed = JSON.parse(v2);
-      if (isValidUserContext(parsed)) return parsed;
+      if (isValidUserContext(parsed)) return withReservedFields(parsed);
       // malformed v2 — fall through to lower tiers
     }
 
     // Tier 2: v1 (Phase 1/2)
     const v1 = localStorage.getItem(USER_CONTEXT_V1_KEY);
     if (v1) {
-      const migrated = migrateFromV1(v1);
+      const migrated = withReservedFields(migrateFromV1(v1));
       saveUserContext(migrated);
       return migrated;
     }
@@ -165,7 +171,7 @@ export function loadUserContext(): UserContext {
     // Tier 3: legacy (V7.0 baseline)
     const legacy = localStorage.getItem(LEGACY_PROFILE_KEY);
     if (legacy) {
-      const migrated = migrateFromLegacy(legacy);
+      const migrated = withReservedFields(migrateFromLegacy(legacy));
       saveUserContext(migrated);
       return migrated;
     }
