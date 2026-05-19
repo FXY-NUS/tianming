@@ -10,7 +10,9 @@ import {
   emptyPalace,
   type PalaceKey,
   type ZiweiData,
+  type ZiweiMainStar,
   type ZiweiPalace,
+  type ZiweiSihua,
 } from './schema';
 
 interface PalaceRowProps {
@@ -23,6 +25,15 @@ interface PalaceRowProps {
 }
 
 const PalaceRow: FC<PalaceRowProps> = ({ label, hint, required, value, onChange, onRemove }) => {
+  const primaryStar = value.mainStars[0];
+
+  const handlePrimaryChange = (next: ZiweiMainStar) => {
+    // Commit 2 adds副主星 UI; here we only edit the primary and preserve any
+    // existing secondary unless the new primary duplicates it.
+    const rest = value.mainStars.slice(1).filter((s) => s !== next);
+    onChange({ ...value, mainStars: [next, ...rest] });
+  };
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-baseline justify-between gap-2">
@@ -44,10 +55,8 @@ const PalaceRow: FC<PalaceRowProps> = ({ label, hint, required, value, onChange,
       <div className="mt-2 grid grid-cols-2 gap-2">
         <select
           className="rounded-lg border-2 border-white bg-white p-2 text-sm focus:border-indigo-500 focus:outline-none"
-          value={value.mainStar}
-          onChange={(e) =>
-            onChange({ ...value, mainStar: e.target.value as ZiweiPalace['mainStar'] })
-          }
+          value={primaryStar}
+          onChange={(e) => handlePrimaryChange(e.target.value as ZiweiMainStar)}
         >
           {ZIWEI_MAIN_STARS.map((s) => (
             <option key={s} value={s}>
@@ -58,7 +67,7 @@ const PalaceRow: FC<PalaceRowProps> = ({ label, hint, required, value, onChange,
         <select
           className="rounded-lg border-2 border-white bg-white p-2 text-sm focus:border-indigo-500 focus:outline-none"
           value={value.sihua}
-          onChange={(e) => onChange({ ...value, sihua: e.target.value as ZiweiPalace['sihua'] })}
+          onChange={(e) => onChange({ ...value, sihua: e.target.value as ZiweiSihua })}
         >
           {ZIWEI_SIHUA.map((s) => (
             <option key={s} value={s}>
@@ -67,6 +76,11 @@ const PalaceRow: FC<PalaceRowProps> = ({ label, hint, required, value, onChange,
           ))}
         </select>
       </div>
+      {value.mainStars.length > 1 && (
+        <div className="mt-2 text-xs text-slate-500">
+          副主星：{value.mainStars[1]}（编辑 UI 在下一版加入）
+        </div>
+      )}
       <input
         type="text"
         className="mt-2 w-full rounded-lg border-2 border-white bg-white p-2 text-xs focus:border-indigo-500 focus:outline-none"
@@ -87,7 +101,7 @@ export function ZiweiForm({ value, onChange }: PersonaFormProps<ZiweiData>) {
     <div className="space-y-3">
       <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
         紫微斗数 plugin 会在每次匹配时往 Gemini Pro 注入 ~400 token。
-        如果你不熟悉自己的星盘，下一版本会加"自动排盘"按钮（按生日计算）。
+        如果你不熟悉自己的星盘，下一版本会加「从文墨天机粘贴导入」按钮。
       </div>
 
       {REQUIRED_PALACES.map((key) => (

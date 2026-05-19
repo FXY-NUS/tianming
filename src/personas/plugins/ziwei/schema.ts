@@ -24,11 +24,27 @@ export const ZIWEI_SIHUA = ['无', '化禄', '化权', '化科', '化忌'] as co
 export const ZiweiSihuaSchema = z.enum(ZIWEI_SIHUA);
 export type ZiweiSihua = z.infer<typeof ZiweiSihuaSchema>;
 
-export const ZiweiPalaceSchema = z.object({
-  mainStar: ZiweiMainStarSchema,
-  sihua: ZiweiSihuaSchema,
-  note: z.string().optional(),
-});
+export const ZIWEI_STRENGTH = ['庙', '旺', '得', '利', '平', '不', '陷'] as const;
+export const ZiweiStrengthSchema = z.enum(ZIWEI_STRENGTH);
+export type ZiweiStrength = z.infer<typeof ZiweiStrengthSchema>;
+
+export const ZiweiPalaceSchema = z
+  .object({
+    mainStars: z
+      .array(ZiweiMainStarSchema)
+      .min(1, '至少 1 颗主星')
+      .max(2, '最多 2 颗主星')
+      .refine((arr) => new Set(arr).size === arr.length, '主星不能重复'),
+    mainStarStrengths: z.array(ZiweiStrengthSchema).optional(),
+    sihua: ZiweiSihuaSchema,
+    note: z.string().optional(),
+  })
+  .refine(
+    (palace) =>
+      palace.mainStarStrengths === undefined ||
+      palace.mainStarStrengths.length === palace.mainStars.length,
+    { message: 'mainStarStrengths 必须与 mainStars 等长（或留空）', path: ['mainStarStrengths'] },
+  );
 export type ZiweiPalace = z.infer<typeof ZiweiPalaceSchema>;
 
 export const ZiweiDataSchema = z.object({
@@ -67,5 +83,5 @@ export const REQUIRED_PALACES: readonly PalaceKey[] = ['ming', 'guanlu', 'caibo'
 export const OPTIONAL_PALACES: readonly PalaceKey[] = ['shen', 'liunian'];
 
 export function emptyPalace(): ZiweiPalace {
-  return { mainStar: '紫微', sihua: '无' };
+  return { mainStars: ['紫微'], sihua: '无' };
 }
