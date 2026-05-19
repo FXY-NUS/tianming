@@ -115,10 +115,37 @@ Phase 4 只预留 `MatchFeedbackRecord`，不训练模型。
 
 ## 5. 与浏览器扩展的关系
 
-扩展不做爬虫，不批量自动打开详情页。
+扩展不做爬虫，不批量自动打开详情页（HANDOFF D4'）。
 
 扩展阶段只提供两类输入：
 - `JobCardSnapshot`：当前搜索结果页已经加载的卡片，用于 `triage`。
 - `JobDetail`：用户主动点开详情后捕获的完整 JD，用于 `audit`。
 
-这保证 Tianming 的省时价值来自“已加载内容的智能筛选”，而不是高风险自动化抓取。
+这保证 Tianming 的省时价值来自"已加载内容的智能筛选"，而不是高风险自动化抓取。
+
+---
+
+## 6. 与 Phase 8+ ML 反馈闭环的衔接
+
+`MatchFeedbackRecord` 类型已经在 `src/core/matchTypes.ts` 定义，并通过 `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 在持久化层预留（v2 storage 自动 back-fill 为 `[]`）。
+
+**v1 rubric 阶段**（当前）：
+- `DEFAULT_SCORING_RUBRIC` 用工程经验权重，不宣称统计学真值。
+- 所有 `MatchScore` 写入 `rubricVersion: 'rubric-v1'` 和 `scoringVersion: 'phase4-scoring-v1'`。
+
+**Phase 8.x ML 阶段**（未实现）：
+- 用户在 UI 给 JD 打 1-5 星或做 `save / reject / apply / ignore` 行为，自动写入 `feedbackRecords`。
+- 当一个用户累积 ≥ 30 条反馈，触发**浏览器端** OLS / Ridge 回归：
+
+  ```
+  user_rating ≈ w₀ + w₁·skill + w₂·culture + w₃·growth + w₄·experience + ...
+  ```
+
+  学到的 `[w₁, ..., wₙ]` 替换 `DEFAULT_SCORING_RUBRIC` 中的权重，生成 `rubric-v2-personalized-<userId>`。
+- < 30 条反馈时继续用默认 rubric。
+- 学习全部在浏览器内进行，不上云（与 D6 一致）。
+
+**铁律**：
+- 训练数据（`feedbackRecords`）跟评分基准（rubric）解耦——任何 rubric 升级都不破坏旧的反馈记录。
+- 学到的个性化 rubric 仍按 §1 原则工作（LLM 抽证据，代码算分），ML 只调权重，不让 LLM 算分。
+- Persona 维度的总权重 cap 依然 ≤ 15%，ML 学到的 persona 权重也要走 `clampPersonaWeight`。
