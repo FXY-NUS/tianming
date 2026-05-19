@@ -3,6 +3,7 @@ import {
   ZIWEI_STRENGTH,
   ZiweiDataSchema,
   emptyPalace,
+  type OpposingPalaceKey,
   type PalaceKey,
   type ZiweiData,
   type ZiweiMainStar,
@@ -22,22 +23,22 @@ const PALACE_NAME_TO_KEY: Record<string, PalaceKey> = {
   夫妻宫: 'fuqi',
 };
 
-// Palaces 文墨天机 emits that we don't model directly; their summary is dumped
-// into the global note so audit prompts retain the information.
-const NON_SCHEMA_PALACES: readonly string[] = [
-  '兄弟宫',
-  '子女宫',
-  '父母宫',
-  '福德宫',
-  '田宅宫',
-  '疾厄宫',
-  '迁移宫',
-  '交友宫',
-];
+// Non-schema palaces — kept as structured opposingPalaces so the audit prompt
+// can reference them (especially 迁移/福德 which are 对宫 of 命/财).
+const OPPOSING_PALACE_NAME_TO_KEY: Record<string, OpposingPalaceKey> = {
+  迁移宫: 'qianyi',
+  福德宫: 'fude',
+  兄弟宫: 'xiongdi',
+  交友宫: 'jiaoyou',
+  父母宫: 'fumu',
+  疾厄宫: 'jie',
+  田宅宫: 'tianzhai',
+  子女宫: 'zinv',
+};
 
 const KNOWN_PALACE_NAMES: ReadonlySet<string> = new Set([
   ...Object.keys(PALACE_NAME_TO_KEY),
-  ...NON_SCHEMA_PALACES,
+  ...Object.keys(OPPOSING_PALACE_NAME_TO_KEY),
 ]);
 
 export type WenmoParseErrorKind =
@@ -152,22 +153,26 @@ export function parseWenmoChart(raw: string): WenmoParseResult {
     }
   }
 
-  // Global note: metadata + non-schema palace summaries.
-  const noteLines: string[] = [];
-  if (metadata.length > 0) {
-    noteLines.push(...metadata);
-  }
+  // 8 non-schema palaces → structured opposingPalaces so promptFragment can
+  // reference 对宫 main stars (especially 迁移 ↔ 命, 福德 ↔ 财) directly.
+  const opposingPalaces: Partial<Record<OpposingPalaceKey, ZiweiPalace>> = {};
   const nonSchemaSummaries: string[] = [];
-  for (const name of NON_SCHEMA_PALACES) {
+  for (const [name, key] of Object.entries(OPPOSING_PALACE_NAME_TO_KEY)) {
     const parsed = byName.get(name);
     if (parsed) {
+      opposingPalaces[key] = palaceFromParsed(parsed);
       nonSchemaSummaries.push(`${name}：${formatPalaceInline(parsed)}`);
     }
   }
-  if (nonSchemaSummaries.length > 0) {
-    if (noteLines.length > 0) noteLines.push('');
-    noteLines.push('其他宫位：');
-    for (const line of nonSchemaSummaries) noteLines.push(`- ${line}`);
+  if (Object.keys(opposingPalaces).length > 0) {
+    data.opposingPalaces = opposingPalaces;
+  }
+
+  // Global note: metadata only (non-schema palaces moved into structured
+  // opposingPalaces above, so we no longer dump their summaries here).
+  const noteLines: string[] = [];
+  if (metadata.length > 0) {
+    noteLines.push(...metadata);
   }
   if (noteLines.length > 0) {
     data.note = noteLines.join('\n');

@@ -189,7 +189,7 @@ describe('parseWenmoChart — golden chart', () => {
     expect(result.data.ming.mainStars).toEqual(['天府']);
   });
 
-  it('emits a global note containing metadata and non-schema palaces', () => {
+  it('emits a global note containing only metadata (non-schema palaces moved to opposingPalaces)', () => {
     if (result.status !== 'ok') throw new Error('expected ok');
     const note = result.data.note ?? '';
     expect(note).toMatch(/性别：女/);
@@ -197,11 +197,29 @@ describe('parseWenmoChart — golden chart', () => {
     expect(note).toMatch(/命主：文曲/);
     expect(note).toMatch(/身主：天机/);
     expect(note).toMatch(/安星码：C5VUC/);
-    expect(note).toMatch(/其他宫位：/);
-    // Non-schema palace summaries should appear.
-    expect(note).toMatch(/兄弟宫/);
-    expect(note).toMatch(/福德宫/);
-    expect(note).toMatch(/疾厄宫/);
+    // The non-schema palace dump is no longer in note — see opposingPalaces test below.
+    expect(note).not.toMatch(/其他宫位：/);
+  });
+
+  it('populates opposingPalaces with all 8 non-schema palaces', () => {
+    if (result.status !== 'ok') throw new Error('expected ok');
+    const op = result.data.opposingPalaces;
+    expect(op).toBeDefined();
+    if (!op) return;
+    // 命宫 对宫 — 迁移宫 from the chart: 武曲[利],七杀[旺]
+    expect(op.qianyi?.mainStars).toEqual(['武曲', '七杀']);
+    expect(op.qianyi?.mainStarStrengths).toEqual(['利', '旺']);
+    // 财帛宫 对宫 — 福德宫 from the chart: 廉贞[陷],贪狼[陷][↓忌][↑权]
+    expect(op.fude?.mainStars).toEqual(['廉贞', '贪狼']);
+    expect(op.fude?.mainStarStrengths).toEqual(['陷', '陷']);
+    expect(op.fude?.sihua).toBe('化权'); // ↑权 wins over ↓忌
+    // Remaining 6 ancillary palaces should also be filled.
+    expect(op.xiongdi).toBeDefined();
+    expect(op.jiaoyou).toBeDefined();
+    expect(op.fumu).toBeDefined();
+    expect(op.jie).toBeDefined();
+    expect(op.tianzhai).toBeDefined();
+    expect(op.zinv).toBeDefined();
   });
 
   it('exposes a preview that callers can render before applying', () => {

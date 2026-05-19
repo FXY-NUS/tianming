@@ -164,6 +164,47 @@ describe('ziweiPromptFragment', () => {
     expect(out).toContain('**天府[得]**');
   });
 
+  it('appends 对宫主星 section when opposingPalaces present, with explicit 借宫 fact for 空宫', () => {
+    const out = ziweiPromptFragment({
+      ...fullData,
+      caibo: { mainStars: ['空宫'], sihua: '无' },
+      opposingPalaces: {
+        qianyi: { mainStars: ['武曲', '七杀'], mainStarStrengths: ['利', '旺'], sihua: '无' },
+        fude: { mainStars: ['廉贞', '贪狼'], mainStarStrengths: ['陷', '陷'], sihua: '化权' },
+      },
+    });
+    // The section header appears so Gemini reads structured 对宫 truth.
+    expect(out).toContain('### 对宫主星');
+    // 命宫 has a regular 对宫 line (not empty).
+    expect(out).toContain('命宫（对宫【迁移宫】）：**武曲[利] + 七杀[旺]**');
+    // 财帛空宫 must be rendered as "借对宫" so Gemini cannot invent "借同宫副星".
+    expect(out).toContain('财帛宫空宫 → 借对宫【福德宫】：**廉贞[陷] + 贪狼[陷]** + 化权');
+  });
+
+  it('renders 其他宫位 ancillary section for the remaining 6 non-schema palaces', () => {
+    const out = ziweiPromptFragment({
+      ...fullData,
+      opposingPalaces: {
+        xiongdi: { mainStars: ['天府'], sihua: '无' },
+        jiaoyou: { mainStars: ['空宫'], sihua: '无' },
+        fumu: { mainStars: ['太阴'], mainStarStrengths: ['陷'], sihua: '化权' },
+        jie: { mainStars: ['太阳'], mainStarStrengths: ['不'], sihua: '化权' },
+        tianzhai: { mainStars: ['巨门'], mainStarStrengths: ['旺'], sihua: '化禄' },
+        zinv: { mainStars: ['天机'], mainStarStrengths: ['庙'], sihua: '无' },
+      },
+    });
+    expect(out).toContain('### 其他宫位');
+    expect(out).toContain('兄弟宫：天府');
+    expect(out).toContain('父母宫：太阴[陷] + 化权');
+    expect(out).toContain('田宅宫：巨门[旺] + 化禄');
+  });
+
+  it('omits 对宫主星 section entirely when opposingPalaces is absent', () => {
+    const out = ziweiPromptFragment(fullData);
+    expect(out).not.toContain('### 对宫主星');
+    expect(out).not.toContain('### 其他宫位');
+  });
+
   it('omits strengths when array length does not match (defensive)', () => {
     const out = ziweiPromptFragment({
       ...fullData,
@@ -237,6 +278,36 @@ describe('normalizeZiweiData', () => {
     const normalized = normalizeZiweiData(dirty);
     expect(normalized.ming.mainStars).toEqual(['紫微']);
     expect(ZiweiDataSchema.safeParse(normalized).success).toBe(true);
+  });
+
+  it('round-trips opposingPalaces through normalization', () => {
+    const data = {
+      ...fullData,
+      opposingPalaces: {
+        qianyi: { mainStars: ['武曲', '七杀'], mainStarStrengths: ['利', '旺'], sihua: '无' },
+        fude: { mainStars: ['廉贞', '贪狼'], mainStarStrengths: ['陷', '陷'], sihua: '化权' },
+        xiongdi: { mainStars: ['天府'], sihua: '无' },
+      },
+    };
+    const normalized = normalizeZiweiData(data);
+    expect(normalized.opposingPalaces?.qianyi?.mainStars).toEqual(['武曲', '七杀']);
+    expect(normalized.opposingPalaces?.fude?.sihua).toBe('化权');
+    expect(normalized.opposingPalaces?.xiongdi?.mainStars).toEqual(['天府']);
+    expect(ZiweiDataSchema.safeParse(normalized).success).toBe(true);
+  });
+
+  it('drops unknown OpposingPalaceKey entries silently', () => {
+    const data = {
+      ...fullData,
+      opposingPalaces: {
+        qianyi: { mainStars: ['武曲'], sihua: '无' },
+        // not a valid OpposingPalaceKey — should be dropped during normalize
+        bogus: { mainStars: ['紫微'], sihua: '无' },
+      },
+    };
+    const normalized = normalizeZiweiData(data);
+    expect(normalized.opposingPalaces?.qianyi).toBeDefined();
+    expect((normalized.opposingPalaces as Record<string, unknown>).bogus).toBeUndefined();
   });
 
   it('keeps a valid double-star palace through round-trip', () => {
