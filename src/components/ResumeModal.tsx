@@ -1,6 +1,10 @@
 import { useState, type DragEvent, type ChangeEvent } from 'react';
 import { X, Plus, Trash2, Edit2, Download } from 'lucide-react';
-import type { UserContext, ResumeProfile, ResumeStructured } from '../../types';
+import type { UserContext, ResumeProfile, ResumeStructured, UserPreferences } from '../../types';
+import {
+  applyProfileSuggestions,
+  buildProfileSuggestions,
+} from '../../services/profileSuggestions';
 import { parseResumeFile, parseResumeText } from '../../services/resumeParser';
 
 type TabType = 'upload' | 'review' | 'settings';
@@ -18,9 +22,16 @@ interface ResumeModalProps {
   onClose: () => void;
   ctx: UserContext;
   onSave: (newCtx: UserContext) => void;
+  onApplyProfileSuggestions: (preferences: UserPreferences) => void;
 }
 
-export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) {
+export function ResumeModal({
+  isOpen,
+  onClose,
+  ctx,
+  onSave,
+  onApplyProfileSuggestions,
+}: ResumeModalProps) {
   const initialActive = ctx.activeResumeId
     ? ctx.resumes.find((r) => r.id === ctx.activeResumeId)
     : undefined;
@@ -39,6 +50,12 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [localResumes, setLocalResumes] = useState<ResumeProfile[]>(ctx.resumes);
   const [localActiveId, setLocalActiveId] = useState(ctx.activeResumeId);
+  const profileSuggestions = structured ? buildProfileSuggestions(structured, ctx.preferences) : [];
+
+  const handleApplyProfileSuggestions = () => {
+    if (!structured || profileSuggestions.length === 0) return;
+    onApplyProfileSuggestions(applyProfileSuggestions(ctx.preferences, profileSuggestions));
+  };
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -351,7 +368,43 @@ export function ResumeModal({ isOpen, onClose, ctx, onSave }: ResumeModalProps) 
               )}
 
               {activeTab === 'review' && structured && (
-                <ReviewTab structured={structured} onStructuredChange={setStructured} />
+                <div className="space-y-4">
+                  {profileSuggestions.length > 0 && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-sm font-semibold text-blue-900">基础档案同步建议</h3>
+                          <p className="mt-1 text-xs text-blue-700">
+                            简历已解析出可用于基础档案的字段。点击应用后才会写入，不会静默覆盖。
+                          </p>
+                        </div>
+                        <button
+                          onClick={handleApplyProfileSuggestions}
+                          className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                        >
+                          应用建议
+                        </button>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {profileSuggestions.map((suggestion) => (
+                          <div
+                            key={suggestion.key}
+                            className="rounded border border-blue-100 bg-white p-2 text-xs"
+                          >
+                            <div className="font-semibold text-blue-900">{suggestion.label}</div>
+                            <div className="mt-1 text-slate-700">
+                              {Array.isArray(suggestion.value)
+                                ? suggestion.value.join(', ')
+                                : suggestion.value}
+                            </div>
+                            <div className="mt-1 text-slate-400">{suggestion.reason}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <ReviewTab structured={structured} onStructuredChange={setStructured} />
+                </div>
               )}
             </div>
 

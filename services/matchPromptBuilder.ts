@@ -33,14 +33,16 @@ export function buildBatchScreenContents(jobs: Job[]): string {
     title: j.title,
     company: j.company,
     snippet: j.content.substring(0, 800),
-    salaryText: j.salary_text,
+    locationText: j.locationText,
+    salaryText: j.salaryText || j.salary_text,
+    workMode: j.workMode,
   }));
 
   return `执行初筛：${JSON.stringify(chunkedJobs)}`;
 }
 
 export function buildDeepAuditContents(job: Job): string {
-  return `启动天命深度审计。公司：${job.company}。职位：${job.title}。JD原文：${job.content}
+  return `启动天命深度审计。公司：${job.company}。职位：${job.title}。地点：${job.locationText || 'unknown'}。薪资：${job.salaryText || job.salary_text || 'unknown'}。工作模式：${job.workMode || 'unknown'}。JD原文：${job.content}
 
 请同时抽取 matchedSkills、missingSkills、transferableSkills、cultureSignals、growthReasons 等评分证据。
 最终 score 和 judgment 将由代码评分引擎生成，不要自行输出最终分数或最终推荐等级。`;

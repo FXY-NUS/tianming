@@ -150,6 +150,27 @@ function withReservedFields(ctx: UserContext): UserContext {
   return { ...ctx, feedbackRecords: [] };
 }
 
+export type UserContextPatch = Partial<Omit<UserContext, 'preferences'>> & {
+  preferences?: Partial<UserContext['preferences']>;
+};
+
+export function mergeUserContextPatch(current: UserContext, patch: UserContextPatch): UserContext {
+  return withReservedFields({
+    ...current,
+    ...patch,
+    preferences: patch.preferences
+      ? { ...current.preferences, ...patch.preferences }
+      : current.preferences,
+    personas: patch.personas ?? current.personas,
+    resumes: patch.resumes ?? current.resumes,
+    activeResumeId: Object.prototype.hasOwnProperty.call(patch, 'activeResumeId')
+      ? patch.activeResumeId
+      : current.activeResumeId,
+    activePersonaIds: patch.activePersonaIds ?? current.activePersonaIds,
+    feedbackRecords: patch.feedbackRecords ?? current.feedbackRecords ?? [],
+  });
+}
+
 export function loadUserContext(): UserContext {
   try {
     // Tier 1: v2 (current)

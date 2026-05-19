@@ -7,6 +7,9 @@ export interface Job {
   url: string;
   content: string;
   salary_text: string;
+  locationText?: string;
+  salaryText?: string;
+  workMode?: string;
   status: 'New' | 'Screened' | 'High Match' | 'Applied' | 'Rejected';
   importedAt: string;
   tags: string[];
