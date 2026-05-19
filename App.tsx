@@ -220,6 +220,14 @@ const App = () => {
       alert('选定的 API 项目未找到，正在重置 Key 选择状态...');
       setHasApiKey(false);
       handleSelectKey();
+    } else if (
+      errorMsg.includes('Failed to fetch') ||
+      errorStr.includes('ERR_SSL_PROTOCOL_ERROR') ||
+      errorStr.includes('ERR_NETWORK')
+    ) {
+      alert(
+        `${type}请求没有到达 Gemini。常见原因是 Codespace 预览页休眠、网络/TLS 连接被浏览器或扩展拦截，或旧的 forwarded port URL 已失效。请重新运行 npm run dev -- --host 0.0.0.0，打开新的 3000 端口预览后重试。`,
+      );
     } else {
       alert(`${type}过程中发生异常，请检查控制台或重试。`);
     }
