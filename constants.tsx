@@ -124,7 +124,7 @@ ${auditDims}
     "cons": ${consExample}
   },
   "cruel_truth_2026": "结合 2026 流年/行业周期预测半年内体感（焦虑/撕逼/暴富/开心）",
-  "career_growth": "预测 3-5 年职业演化路径",
+  "career_growth": "针对【此 JD】给出未来 12-24 个月的可执行 action plan（最多 4 条要点，每条形如：'近 6 个月：补齐 K8s 实操，目标考下 CKA 证书' / '12-18 个月：争取 lead 一次端到端 ML 上线项目')。要具体、可量化、有时间锚，不要写'多读书 / 拓人脉'这种宽泛话术。",
   "interview_tactics": "针对背景的面试必杀技",
   "contract_red_flags": "入职前必须确认的避坑条款"
 }${constraint}

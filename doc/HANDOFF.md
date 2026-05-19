@@ -1,4 +1,4 @@
-# Tianming · 项目交接文档 v1.4
+# Tianming · 项目交接文档 v1.5
 
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
@@ -45,8 +45,9 @@
 2. **单 JD 深度审计**（Gemini Pro，输出卦象 + Pros/Cons + 残酷真相 + 面试策略 + 合同红旗）
 3. **多维度用户画像**（MBTI / Holland / Big5 / 紫微斗数 插件化）
 4. **简历智能解析**（Gemini 多模态读 PDF/DOCX/图片，结构化抽取）
-5. **浏览器扩展**(Manifest V3，主流招聘站一键采集 JD)
-6. **反向赋能**（Cover Letter 生成 / 简历针对性优化建议）
+5. **浏览器扩展**（Manifest V3，主流招聘站卡片粗筛 + 用户点开详情捕获）
+6. **投递助手**（L2 结构化字段一键复制 + L3 侧边栏 overlay paste-helper）
+7. **反向赋能**（Cover Letter 生成 / 简历针对性优化建议）
 
 **差异化叙事（对外）**：
 > 基于 Gemini 多模态 + 插件化用户画像系统 + Chrome 扩展三端联动的智能求职助手。
@@ -55,6 +56,46 @@
 - 插件化的 Persona 系统是真正的架构创新（不是堆 prompt）
 - 浏览器扩展 + Web App + 未来桌面端三端联动
 - 简历-岗位双向匹配引擎（而非单向打分）
+
+---
+
+## 1.5 North Star（决策准绳，所有 PR/功能取舍都要过这一句）
+
+> **"帮一个怕错的人按下投递键。每天 3 个 picks → 决策 → 行动，全链路。"**
+
+**目标用户**：犹豫型 / ADHD 求职者。看到 100 个 JD 头疼、迟迟不行动的人。
+**不是目标用户**：海投型用户。LinkedIn Easy Apply、Indeed One-Click、Autofill 插件已经为他们服务。
+
+**任何新功能上来都问一遍**：
+- ✅ "这个让用户少 freeze 一次了吗？" → 做
+- ❌ "这个只对海投型用户有价值？" → 不做
+- ❌ "这个让用户陷入更多选择？" → 不做
+
+**三层产品叙事**（一定记住）：
+
+```
+Layer 1 · 筛选层（Triage）
+  100 个 JD → 3 个值得看的
+  解决：选择瘫痪
+
+Layer 2 · 决策层（Audit）
+  深度审计 + 卦象 + pros/cons + 12-24 月 action plan
+  解决：怕错而不敢按下投递
+
+Layer 3 · 行动层（Apply Assistant）  ⭐ 关键，不能漏
+  L2 结构化字段一键复制 + L3 侧边栏 overlay paste-helper
+  解决：填表认知摩擦力，ADHD 卡在最后一公里
+```
+
+**永久不做的事**（North Star 推出来的硬约束）：
+- ❌ L4/L5 真正 autofill / auto-submit（合规雷区 + 用户账号封禁风险）
+- ❌ 批量海投工具
+- ❌ "AI 替你做所有事"的全自动求职 agent
+
+**新用户最低门槛**（onboarding 路径）：
+- 必须：上传简历 + 填几个基础偏好
+- 完全可选：Persona 插件（MBTI / Holland / Big5 / 紫微）/ 文墨天机粘贴 / 自定义权重
+- "想玩才玩"——新用户 0 触碰 Persona 也能跑通整个产品
 
 ---
 
@@ -208,6 +249,27 @@ Web App / Extension
 ```
 后端必须负责：用户登录、调 Gemini、token 计数、每用户每日 / 月限额、Stripe / 类似支付、防刷接口、成本预警 / 熔断、记录 `modelVersion` + `rubricVersion` + `scoringVersion`。
 
+### D11. 投递助手分级铁律（North Star 推出来的硬约束）
+
+为犹豫型 / ADHD 用户过"最后一公里"，但**严格分级**：
+
+| 等级 | 内容 | 状态 |
+|---|---|---|
+| **L0** | 什么都不做 | 起点 |
+| **L1** | JD 卡片高亮"立即投递"链接 | M1 含 |
+| **L2** | 结构化字段一键复制 + AI 生成 cover snippet（可编辑后复制） | **M1 必做**（Phase 5.5）|
+| **L3** | 扩展侧边栏 overlay（每字段点按钮复制 → 用户手动粘贴）| **M2 必做**（Phase 6.5）|
+| **L4** | 扩展自动 fill 表单字段（用户点提交）| ❌ **永久不做** |
+| **L5** | headless 自动提交 | ❌ **永久不做** |
+
+**为什么 L4/L5 永久不做**：
+- ATS 系统对自动行为模式有检测，触发 = 用户求职账号被打入冷宫
+- Symplicity 是高校求职系统，ban 影响整个学校账户
+- North Star 是"帮犹豫者按下按钮"，**不是"替犹豫者按按钮"**——后者会让用户更加依赖、更加焦虑
+
+**关键产品语**（写进 UI 提示 + Chrome Web Store 描述）：
+> Tianming 不替你提交。所有投递都是你自己手动点的。
+
 ### D10. 多 Provider 抽象（**预留，不实现**）
 为防止"换模型导致前后打分不一致"，未来允许接 Claude / OpenAI / DeepSeek，但实现服从以下约束：
 
@@ -230,6 +292,38 @@ interface LlmProvider {
 
 ## 5. 完整 Phase 路线图
 
+### 5.0 双轴结构：Tracks（并行）× Milestones（时间锚）
+
+路线图按**工作流（Track）**横向拆分，按**可演示版本（Milestone）**纵向锚定。Phase N 编号保留只作为**功能簇 ID**，不再隐含时间顺序。
+
+#### Tracks（并行的工作流）
+
+| Track | 内容 | 主做方 |
+|---|---|---|
+| **A. 数据 / 评分 / 存储** | Phase 4 收尾 · Phase 5 Dexie · 4.5 简历 Union | **Codex 主做**（本地浏览器 + IndexedDB 调试） |
+| **B. Persona / 插件** | 2.6 紫微 polish · 2.7 六爻 · 2.8 MBTI+RIASEC | **Claude Code 主做**（schema/prompt/test） |
+| **C. 浏览器扩展** | Phase 6.0-6.4 + 后端代理雏形 | **Codex 主做**（Chrome 加载本地扩展调试） |
+| **D. 投递助手** | 5.5 L2 剪贴板 · 6.5 L3 overlay | **Claude Code 主写代码 → Codex 本地 UX 验收** |
+| **E. UI 设计 + 实现** | Phase 7 整体重做（围绕"3 张牌" + Apply Assistant 重新设计） | **Claude Design 设计稿 → Claude Code/Codex 翻译为 React 组件** |
+| **F. 反向赋能** | Phase 8 Cover Letter · 简历针对性优化（**注**：学校已有项目组做"AI 改简历"，非 unique value，延后） | Claude Code |
+
+#### Milestones（demo 锚点）
+
+| Milestone | 含义 | 包含 Track 内容 | 估时 |
+|---|---|---|---|
+| **M1 · Local MVP** | 本地端到端跑通，可演示完整决策闭环 | A 收尾 + B 紫微 polish + D L2 + 现有 UI | 1-2 周 |
+| **M2 · Browser Beta** | 加扩展卡片粗筛 + L3 paste-helper | + C + D L3 | 再 2-3 周 |
+| **M3 · Design Polish** | UI 整体焕新成"3 张牌 + Apply Assistant" 设计 | + E（Claude Design） | 再 1-2 周 |
+| **M4 · Public Launch** | 后端代理 + Vercel 部署 + Chrome Store | + Phase 11 + D9 后端 | 再 1-2 周 |
+
+#### Demo-first 纪律
+
+- 主线开发**不强求每个 Track 完美**；
+- **每周末必须有一个 stable demo branch**，能跑、能演示、可截图；
+- 如果 Milestone 截止前发现某 Phase 还差临门一脚，**宁可砍功能保 demo 可跑**。
+
+---
+
 ### Phase 0 — V7.0 Baseline ✅ Done
 代码导入、AI Studio 依赖修复、git 初始化、push GitHub。
 
@@ -244,6 +338,34 @@ interface LlmProvider {
 - 4 个核心插件：MBTI / Holland / Big5 / 紫微斗数
 - 落地细节见 `doc/phase-2-notes.md`
 - PR #3
+
+---
+
+### Phase 2.6 — 紫微 plugin polish（Track B）⏳ 进行中
+**Branch**: `feat/phase-2-6-ziwei-polish`
+
+**已落地（commit 27bec22 / be7d5e9 / 4b3b86c / 89a2373 / 14413fb）**：
+- schema 升级 `mainStar → mainStars[1..2]` + `mainStarStrengths` + 旧数据 `normalizeZiweiData`
+- UI 副主星 toggle / 副星备注折叠
+- 文墨天机命盘文本 zero-LLM parser + UI 导入面板
+- 星名内部空格归一化（"天   相" → 天相）
+- **opposingPalaces**：8 非 schema 宫位结构化保存 + promptFragment 新增"对宫主星"段落 + 空宫显式"借对宫"事实
+- career_growth prompt 重写：3-5 年泛化路径 → 12-24 个月可执行 action plan
+
+**延后到 Phase 2.6+**：手动强度 selector UI / 四化层次（生年/大限/流年/自化）schema v2 / iztro 排盘库接入
+
+### Phase 2.7 — 六爻插件（一事一占）⏸ 待启动
+**目标**：用户对一个具体 JD 起卦 → 输出"建议投递 / 谨慎 / 不建议" + 一段简短解读。**完美对齐 North Star**——犹豫型用户需要的就是一个外部锚帮下决心。
+
+- 等用户联系真懂六爻的家属做内容审核（不让 Gemini 自由发挥）
+- 边界：1 个 plugin，1 种用法（每 JD 一卦），1 个 Gemini call
+- ❌ 不做"开局通占大运 / 一卦看一生"——那是 Pro 深审的事
+
+### Phase 2.8 — MBTI / RIASEC plugin polish ⏸ Backlog
+**Track B**，可并行做：
+
+- **MBTI**：promptFragment 去刻板印象（不输出"INTJ 适合 X"），改成只输出**人格 dimension 倾向**让 Gemini 自己结合 JD 判断。引用 Pittenger 1993 critique 在 description 里。
+- **RIASEC**：schema 加可选 `scores: {R,I,A,S,E,C: number}` 完整量表；未填完整时按 3:2:1 权重映射主/次/三主导。
 
 ---
 
@@ -302,6 +424,11 @@ interface LlmProvider {
 
 ---
 
+### Phase 4.5 — 简历 Union 匹配 ⏸ Backlog（小，半天）
+**Track A**：scoring engine 在 active resume 一份的基础上，**用所有 ResumeProfile.skills 的并集做匹配**，结果显示哪一份命中。**针对犹豫型用户**——他们不知道用哪份简历投，我们自动选最匹配的。
+
+---
+
 ### Phase 5 — 存储升级 localStorage → Dexie
 **目标**：JD / UserContext / 简历 Blob 全迁到 IndexedDB；**同时根治 Phase 4 smoke-test A1 的数据丢失**。
 
@@ -322,8 +449,30 @@ interface LlmProvider {
 
 ---
 
-### Phase 5.5（已搁置）— 多模态截图导入 JD
-UX 不如复制粘贴，跳过。未来需要再开。
+### Phase 5.5（重新定义）— Apply Assistant L2 投递助手 · 结构化字段一键复制
+**Track D，M1 必含**。这是为犹豫型 / ADHD 用户**过最后一公里**的关键功能。详细分级见 §4 D11。
+
+**目标**：Pro 深审完成后多出一个"📋 投递助手"入口 → 弹出 modal，结构化展示：
+- 基本信息（姓名 / 邮箱 / 电话 / 地址）每项独立 一键复制
+- 教育经历（每段每个字段独立）
+- 工作经历（每段每个 bullet 独立）
+- **AI 生成 "Why this company"**（基于 JD + 简历 → textarea **可编辑** → 复制）
+- **AI 生成 "Why a good fit"**（基于 JD pros/cons → 同上 → 可编辑 → 复制）
+- 期望薪资 / 可入职时间等动态字段一键复制
+- 顶部一个大按钮 "↗️ 跳转到投递页"（用 JD.url 新窗口打开）
+
+**关键产品语**：**不替用户提交**——用户 100% 手动点"粘贴"按钮，行为本质是"复制粘贴"，跟 1Password 一个性质。**永远不做 L4 真正 autofill / L5 auto-submit**（见 §4 D11）。
+
+**Gemini 调用**：+1（生成 cover snippets 那一次）。叙述部分允许 temperature 中等，给 narrative 留余地。
+
+**工期**：1.5-2 天。
+
+**~~原 Phase 5.5 截图导入 JD~~**：已搁置（UX 不如复制粘贴）。
+
+---
+
+### Phase 6.5 — Apply Assistant L3 侧边栏 overlay（依赖 Phase 6）
+**Track D, M2 必含**。扩展把 Apply Assistant 的内容呈现为**当前投递页右侧 overlay**，每个字段一个"点这里复制 → 然后粘贴到对应输入框"的按钮。仍是 100% 手动粘贴，不 autofill。
 
 ---
 
@@ -343,18 +492,52 @@ UX 不如复制粘贴，跳过。未来需要再开。
 
 ---
 
-### Phase 7 — UI 整体调整
-**目标**：吃透 Claude Design 设计稿，整体 UI 升级。
+### Phase 7 — UI 整体调整（Track E）
+**目标**：围绕 North Star "3 张牌 + Apply Assistant" 的新视觉重做 UI。
 
-**实现**：
+**工作流**（Claude Design 加入后）：
+1. **前 M3 期间**：用户用 Claude Design 周期性跑屏 mock → 截图存 `doc/design/` → 不立刻 merge
+2. **M3 期间**：Claude Design 出的 mock 由 Claude Code 翻译成 React + Tailwind，逐屏替换现有 UI
+3. **现状参考**：用户已在 Claude Design 跑了"天命导航仪 Design System"（古典神秘风格，京华老宋体 / IM Fell English / LXGW WenKai），见 `doc/design/` 截图
+
+**Claude Design Prompt 通用模板**：
+```
+你是 Tianming（天命）项目的 UI 设计师。
+
+【North Star】为犹豫型 / ADHD 求职者做的决策助手。
+核心叙事：100 个 JD → 筛到 3 个 → 一键决策 → 投递助手帮过最后一公里。
+
+【技术栈约束】
+- React 18 + TypeScript + Vite + Tailwind CSS（indigo 紫色品牌）
+- 准备引入 shadcn/ui（按需）
+- 暗色模式友好（dark: prefix）
+- 移动端兼容（min-width: 320px）
+
+【视觉锚点】
+- 主色：indigo-500/600；强调：rose（危险）/ emerald（推荐）
+- 字体：京华老宋体 + IM Fell English SC + LXGW WenKai（已建 design system）
+- 圆角 rounded-xl；暗色背景 slate-900
+
+【这一屏要画什么】（具体写）
+
+请输出完整的 React + Tailwind component（含 mock 数据），并附设计决策说明。
+```
+
+**必跑的 4 屏**（按优先级）：
+1. **Top 3 Picks 主页**：3 张大卡片 + 一行简评 + 三个维度标签 + 卦象徽章
+2. **Apply Assistant Modal**：结构化字段一键复制 + AI cover snippet 可编辑 + 跳转投递按钮
+3. **Pro 深审结果页**：卦象 + Pros/Cons + 12-24mo action plan + 投递助手入口
+4. **Onboarding**：简历上传 → 偏好填写 → 完成。Persona/文墨天机彻底折叠为可选
+
+**实现 Track**：
 - 建立 `src/ui/components/` + `src/ui/_design-source/`（记录每个组件对应的设计来源）
 - shadcn/ui 按需引入
 - 暗色模式 / 响应式 / 移动端适配
 - 顺手清理：搬迁根目录文件到 src/，移除 metadata.json
 
-**工期**：1 天
+**工期**：1-2 天 + Claude Design 出图时间
 
-**待商榷**：用户需提供 Claude Design 设计稿链接 / 导出
+**待商榷**：是否引入新字体（京华老宋体 .woff2 等）vs 用系统字体保性能
 
 ---
 
@@ -532,6 +715,7 @@ main (始终可发布)
 
 ## 10. 协作约束
 
+### 10.1 通用沟通
 - 用户用中文沟通，**请用中文回复**
 - 用户对前端工程化熟悉度中等，**重要 CLI 命令需要解释作用**
 - 用户是 **Windows 用户**，Bash 命令需用 PowerShell / CMD 等价写法或说明
@@ -540,22 +724,59 @@ main (始终可发布)
 - 遇到与本文档冲突的情况**停下来询问**，不要自作主张改方向
 - 讲解技术时优先用类比和具象例子，避免堆砌术语
 
+### 10.2 三方分工矩阵（Codex / Claude Code / Claude Design）
+
+| 任务类别 | 主做 | 备注 |
+|---|---|---|
+| Track A 数据/评分/存储（Phase 4/4.5/5）| **Codex** | 需要本地浏览器 + localStorage/IndexedDB + 多 tab + Windows 验证 |
+| Track B Persona 插件（Phase 2.6/2.7/2.8）| **Claude Code** | schema / prompt / 测试 / 文档，云端做高效 |
+| Track C 浏览器扩展（Phase 6）| **Codex** | 需要 Chrome 加载本地扩展调试 |
+| Track D 投递助手（Phase 5.5/6.5）| **Claude Code 主写 → Codex 本地 UX 验收** | 代码逻辑在云端做，最终交互体验本地确认 |
+| Track E UI 设计 + 实现（Phase 7）| **Claude Design 出 mock → Claude Code/Codex 翻译实现** | 见 Phase 7 工作流；mock 存 `doc/design/` |
+| Track F 反向赋能（Phase 8）| **Claude Code** | 偏 prompt + schema 工作 |
+| HANDOFF / 文档沉淀 | **Claude Code** | 文档整理云端做效率高 |
+| PR 合 main 后本地同步 | **Codex** | 本地 workspace 职责，云端不需要 |
+| 真实 smoke 测试（用户填真数据 + 测端到端 UX）| **用户 + Codex 本地** | 云端 Claude Code 跑不动 dev server 给用户看 |
+
+**冲突避免**：
+- 同一 PR 不同时开两个 agent 改重叠文件——开始之前先 grep 一下另一方分支的活动
+- HANDOFF.md 改动统一让 Claude Code 处理
+- 设计稿改动统一从 Claude Design 出，不要 Codex/Claude Code 直接修 mock
+
+### 10.3 Claude Design 工作流操作指南
+
+**Claude Design 是什么**：Anthropic 提供的 UI 设计工具，基于 Claude 能力生成 HTML/CSS 预览 + 设计 system 文档。**不是直接 ship 的代码**，是设计稿来源。
+
+**输入约束**：
+- 单屏 / 单组件粒度（不要让它一次画整个应用）
+- 给清楚的 North Star + 技术栈 + 视觉锚点 + 这一屏内容（用 Phase 7 通用模板）
+- 提供已有视觉参考时尽量贴截图
+
+**输出处理**：
+- 截图 + 导出 HTML/CSS 存 `doc/design/<phase>/<screen>.png` + `.html`
+- 在 M3 启动前**不要直接把生成的 React 合 main**——先做参考，等翻译
+- 翻译时由 Claude Code 用项目实际依赖（Tailwind + shadcn/ui）重写，不直接照搬 Claude Design 的 inline 样式
+
+**用户已有进度**：用户已经跑了"天命导航仪 Design System"——含品牌色板（bg-void / deep / surface / elevated / rim）、Typography（京华老宋体 / IM Fell English SC / LXGW WenKai）、按钮组件（深金色边框，glow-azure 强调）。这套设计系统**优先级 = 视觉基线**，后续屏 mock 必须沿用同一套 token。
+
 ---
 
 ## 11. 接力指令
 
-**当前位置**：Phase 0 / 1 / 2 / 3 ✅ Done，**Phase 4 核心已完成**（scoring engine + match engine + persona 注入 merged via PR #10-14），**正在 smoke-test 收尾**——Codex 在分支上修 A1-A4 那批问题。**Phase 5（Dexie）将合并 A1 数据丢失修复一起做**。
+**当前位置**：Phase 0/1/2/3 ✅ Done · **Phase 4 核心 + smoke fix** ✅ merged 到 main · **Phase 2.6 紫微 polish** 在 `feat/phase-2-6-ziwei-polish` 分支（含 schema 升级 / UI 副主星 / 文墨天机 parser / opposingPalaces / career_growth 重写）· **North Star + Tracks/Milestones 已确立**（见 §1.5 + §5.0）。
 
 **新 session 第一步**：
-1. 读完本文档全文（特别是 §4 D1-D10 核心架构决策）。
+1. 读完本文档全文，**特别是 §1.5 North Star + §4 D1-D11 + §5.0 Tracks/Milestones + §10.2 三方分工**。
 2. 读 `doc/scoring-rubric.md` 理解评分系统的 Pass A/B/C 三层架构。
-3. 读 `doc/phase-2-notes.md` / `phase-3-notes.md` / `phase-4-notes.md` 了解每个 Phase 的落地范式和已经验证的代码层约定。
+3. 读 `doc/phase-2-notes.md` / `phase-3-notes.md` / `phase-4-notes.md` 了解每个 Phase 的落地范式。
 4. 浏览 `types.ts`、`src/core/`、`services/`、`src/personas/index.ts`、`src/components/ResumeModal.tsx` 摸清现有范式。
 5. **不要写任何代码**，先：
-   a. 用清晰友好的中文向用户确认你理解了项目架构（一两段，避免堆术语）
-   b. 看 Codex 是否已经 merge Phase 4 smoke-test 修复（`main` HEAD 高于 `8a8e69a` 且 commit message 含 A1/A2/A3/A4 相关 fix）
-   c. 如果已合并 → 提出 Phase 5 拆解（5-7 个 commit，含 A1 根因调查 + Dexie schema + migration + liveQuery 替换 + 简历 Blob 存储 + 验收）
-   d. 如果未合并 → 等 Codex 推完再开 Phase 5，期间可独立做 Phase 2.6 plugin polish（紫微 / MBTI / RIASEC，见 Q9-Q12）
+   a. 用清晰友好的中文向用户确认你理解了 North Star + 当前位置（一两段，避免堆术语）
+   b. **看 main HEAD**：是否含 `feat/phase-2-6-ziwei-polish` 合并 → 决定下一步起点
+   c. 根据 Milestone 进度提建议：
+      - **M1 未达成** → 优先 Track A 收尾 + Track B 紫微 polish 合并 + Track D Phase 5.5 启动
+      - **M1 达成** → 进 M2，Track C 浏览器扩展启动 + Track D L3 overlay
+      - **M2 达成** → 进 M3，Track E UI 重做（Claude Design 出图 → Code 翻译）
 
 **评分系统的 6 条铁律（一定要记住）**：
 1. LLM 抽证据，代码算分；Gemini 永远不输出 `overall` / `judgment`，schema 不留这两个字段。
@@ -578,4 +799,4 @@ main (始终可发布)
 
 ---
 
-*文档版本 v1.4 · 2026-05-19 · Phase 4 落地 + smoke-test 反馈 + D4'/D9/D10 决策 + Phase 5 scope 扩展 + 6 条评分铁律*
+*文档版本 v1.5 · 2026-05-19 · North Star 确立 + Tracks/Milestones 双轴重排 + D11 投递助手分级铁律 + Phase 2.6/2.7/2.8/4.5/5.5/6.5 新增 + Claude Design 加入工作流 + 三方分工矩阵*

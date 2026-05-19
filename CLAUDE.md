@@ -11,8 +11,8 @@
 
 1. `doc/agent-workflow.md`：判断运行环境，不混用本地/云端规则。
 2. `claudecode.md`：Claude Code 云端开发 SOP。
-3. `doc/HANDOFF.md`：项目总交接和 Phase 路线（**§4 D1-D10 + §11 接力指令的 6 条评分铁律 + 隐私合规铁律必读**）。
-4. `doc/scoring-rubric.md`：Phase 4 评分体系细节（Pass A/B/C 三层 + LLM 抽证据 / 代码算分根原则）。
+3. `doc/HANDOFF.md` v1.5：项目总交接（**§1.5 North Star + §4 D1-D11 + §5.0 Tracks/Milestones + §10.2 三方分工 + §11 接力指令的 6 条评分铁律必读**）。
+4. `doc/scoring-rubric.md`：Phase 4 评分体系（Pass A/B/C 三层 + LLM 抽证据 / 代码算分根原则）。
 5. 当前 Phase notes，例如 Phase 4 期间读 `doc/phase-4-notes.md`，Phase 5 期间读 `doc/phase-5-notes.md`（如果存在）。
 
 关键提醒：
@@ -37,7 +37,7 @@
 - 本地 `npm run dev` 可正常调用 Gemini API
 - Phase 0 / 1 / 2 / 3 / **4 核心** 已 merge 进 main：工具链 + UserContext 数据模型 + Persona 插件系统（4 个）+ 简历上传与多模态解析 + **Match Engine + Scoring Engine**（LLM 抽证据 / 代码算分，Pass A/B/C 三层架构）+ Persona UI 接入。详见 `doc/HANDOFF.md` §2、`doc/phase-2/3/4-notes.md`、`doc/scoring-rubric.md`。
 - `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8+ 浏览器端轻量 ML 学个性化权重铺垫。
-- **当前焦点**：Phase 4 smoke-test 收尾（A1 数据丢失 / A2 简历→preferences 数据流 / A3 薪资 slider / A4 unknown 率），收尾后立刻进 Phase 5（Dexie 存储升级 + 顺手根治 A1）。Codex 在分支上修，Claude Code 不要重复改同一批文件。
+- **当前焦点**：Phase 4 smoke-test 收尾（A1 数据丢失 / A2 简历→preferences 数据流 / A3 薪资 slider / A4 unknown 率）已 merged 到 main。Phase 2.6 紫微 polish 在 `feat/phase-2-6-ziwei-polish` 分支（含文墨天机 parser + opposingPalaces）。**North Star + Tracks/Milestones 已确立（见 HANDOFF §1.5 + §5.0）**。下一步按 Milestone 推：M1 → A 收尾 + B 紫微 polish 合并 + Track D Phase 5.5 启动。Codex / Claude Code / Claude Design 三方分工见 HANDOFF §10.2。
 
 ## 三、Tech Stack
 
