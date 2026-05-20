@@ -9,13 +9,15 @@ import type {
   JobDetail,
   MatchLabel,
   MatchScore,
+  ResumeMatchBreakdown,
+  ResumeSkillCoverage,
   ScoringInput,
   ScoringRubric,
   ScoringRubricDimension,
   SkillEvidence,
 } from './matchTypes';
 
-export const SCORING_VERSION = 'phase4-scoring-v1.2';
+export const SCORING_VERSION = 'phase4-scoring-v1.3';
 
 export const DEFAULT_SCORING_RUBRIC: ScoringRubric = {
   version: 'rubric-v1',
@@ -42,6 +44,7 @@ export function buildMatchScore(input: ScoringInput): MatchScore {
   const weighted = aggregateDimensions(dimensions, rubric.dimensions);
   const hardRejected = dimensions.some((dimension) => dimension.hardFail);
   const overall = hardRejected ? Math.min(weighted, 20) : weighted;
+  const resumeBreakdown = computeResumeBreakdown(input.user, input.evidence);
 
   return {
     overall,
@@ -53,7 +56,99 @@ export function buildMatchScore(input: ScoringInput): MatchScore {
     providerId: input.providerId,
     modelId: input.modelId,
     createdAt: new Date().toISOString(),
+    resumeBreakdown,
   };
+}
+
+/**
+ * Phase 4.5 — cross-resume skill coverage.
+ *
+ * The LLM's Pass B evidence sees only the active resume in its prompt, so its
+ * matched/missing/transferable categorisation is biased to that resume. We
+ * extract just the *JD-required* skill names (the union of all three lists)
+ * and re-check each user resume locally against its `structured.skills` fields.
+ *
+ * Limitation: we can only re-check against skills the LLM already surfaced. A
+ * resume whose strongest skills weren't even mentioned in the JD-skill list
+ * won't show as a winner. Acceptable for v1 — future iteration could change
+ * the LLM contract to extract JD-skills independent of any resume.
+ */
+export function computeResumeBreakdown(
+  user: UserContext,
+  evidence?: ExtractedEvidence,
+): ResumeMatchBreakdown | undefined {
+  if (!evidence || user.resumes.length === 0) return undefined;
+
+  const jdSkills = collectJdSkills(evidence);
+  if (jdSkills.length === 0) return undefined;
+
+  const totalJdSkills = jdSkills.length;
+  const perResume: ResumeSkillCoverage[] = user.resumes.map((resume) => {
+    const resumeSkillSet = collectResumeSkills(resume);
+    const covered: string[] = [];
+    const missing: string[] = [];
+    for (const skill of jdSkills) {
+      if (resumeSkillSet.has(lower(skill))) covered.push(skill);
+      else missing.push(skill);
+    }
+    return {
+      resumeId: resume.id,
+      resumeLabel: resume.label,
+      coveredSkills: covered,
+      missingSkills: missing,
+      coverageCount: covered.length,
+      coverageRatio:
+        totalJdSkills > 0 ? Math.round((covered.length / totalJdSkills) * 100) / 100 : 0,
+    };
+  });
+
+  perResume.sort((a, b) => {
+    if (b.coverageCount !== a.coverageCount) return b.coverageCount - a.coverageCount;
+    return b.coverageRatio - a.coverageRatio;
+  });
+
+  return {
+    bestResumeId: perResume[0].resumeId,
+    activeResumeId: user.activeResumeId,
+    totalJdSkills,
+    perResume,
+  };
+}
+
+function collectJdSkills(evidence: ExtractedEvidence): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const sources = [
+    ...evidence.matchedSkills,
+    ...evidence.missingSkills,
+    ...evidence.transferableSkills,
+  ];
+  for (const item of sources) {
+    const skill = item.skill?.trim();
+    if (!skill) continue;
+    const key = lower(skill);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(skill);
+  }
+  return out;
+}
+
+function collectResumeSkills(resume: ResumeProfile): Set<string> {
+  const set = new Set<string>();
+  const add = (value: string) => {
+    const key = lower(value.trim());
+    if (key) set.add(key);
+  };
+  const { skills, projects } = resume.structured;
+  skills.hard.forEach(add);
+  skills.soft.forEach(add);
+  skills.tools.forEach(add);
+  skills.languages.forEach(add);
+  for (const project of projects) {
+    project.tech.forEach(add);
+  }
+  return set;
 }
 
 export function aggregateDimensions(
