@@ -1,4 +1,4 @@
-# Tianming · 项目交接文档 v1.5
+# Tianming · 项目交接文档 v1.7
 
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
@@ -109,6 +109,8 @@ Layer 3 · 行动层（Apply Assistant）  ⭐ 关键，不能漏
 - ✅ **Phase 0**：V7.0 baseline 导入 + AI Studio 依赖适配
 - ✅ **Phase 1**：UserContext 数据模型 + 工程化工具链（Tailwind / ESLint / Prettier / Husky / Vitest / Zod / RHF）
 - ✅ **Phase 2**：Persona 插件系统（MBTI / Holland / Big5 / 紫微斗数）
+- ✅ **Phase 2.6**：紫微 polish（双主星 + mainStarStrengths + 文墨天机 parser + opposingPalaces + 12-24mo action plan）— PR #18 merged
+- ✅ **Phase 2.8**：MBTI / RIASEC polish（MBTI 4 维 dimension expansion + Pittenger 1993 / RIASEC 6 维原始分 + 百分比归一化 + 3:2:1 fallback）— 详见 `doc/phase-2-8-notes.md`
 - ✅ **Phase 3**：简历上传 + Gemini 多模态结构化解析 + 多版本管理 + Prompt 命理图层条件化（详见 `doc/phase-3-notes.md`）
 
 ### 当前 Repo 结构
@@ -345,8 +347,8 @@ interface LlmProvider {
 
 ---
 
-### Phase 2.6 — 紫微 plugin polish（Track B）⏳ 进行中
-**Branch**: `feat/phase-2-6-ziwei-polish`
+### Phase 2.6 — 紫微 plugin polish（Track B）✅ Done · PR #18 merged
+**Branch**: `feat/phase-2-6-ziwei-polish`（已合 main）
 
 **已落地（commit 27bec22 / be7d5e9 / 4b3b86c / 89a2373 / 14413fb）**：
 - schema 升级 `mainStar → mainStars[1..2]` + `mainStarStrengths` + 旧数据 `normalizeZiweiData`
@@ -365,11 +367,15 @@ interface LlmProvider {
 - 边界：1 个 plugin，1 种用法（每 JD 一卦），1 个 Gemini call
 - ❌ 不做"开局通占大运 / 一卦看一生"——那是 Pro 深审的事
 
-### Phase 2.8 — MBTI / RIASEC plugin polish ⏸ Backlog
-**Track B**，可并行做：
+### Phase 2.8 — MBTI / RIASEC plugin polish（Track B）✅ Done
+**Branch**: `feat/phase-2-8-mbti-riasec-polish` · Commits: `ed3e0b7` (MBTI) + `1270034` (RIASEC) · 详见 `doc/phase-2-8-notes.md`
 
-- **MBTI**：promptFragment 去刻板印象（不输出"INTJ 适合 X"），改成只输出**人格 dimension 倾向**让 Gemini 自己结合 JD 判断。引用 Pittenger 1993 critique 在 description 里。
-- **RIASEC**：schema 加可选 `scores: {R,I,A,S,E,C: number}` 完整量表；未填完整时按 3:2:1 权重映射主/次/三主导。
+**已落地**：
+- **MBTI**：`MBTI_DESCRIPTIONS` 16 个职业刻板 label（"建筑师 / 指挥官 / 竞选者…"）替换为中性 4 维 dimension expansion（INTJ → "内倾 · 直觉 · 思维 · 判断"）；新增 `MBTI_DIMENSION_LABEL` / `MBTI_DIMENSION_DESCRIPTION` 两层；promptFragment 改输出 4 维倾向 + Pittenger 1993 critique blockquote；plugin.description 加"非职业诊断"框定；anti-pattern blocklist test 防回滚。
+- **RIASEC**：schema 加可选 `scores: {R,I,A,S,E,C: int >= 0}`（接受任意原始分，O*NET / SDS / 中文量表都行）；`deriveHollandRawScores()` + `hollandPercentages()` 两段式归一化（用户原始分优先，未填走 3:2:1 fallback）；promptFragment 新增"6 维强度（占比）"行 + 来源标注（让 Gemini 知道置信度）；HollandForm 加可折叠 6 输入区（默认收起，全空清字段）。
+- **接口签名 0 变化**：constants.tsx / scoring engine 不需要任何改动。
+
+**延后到 Phase 2.8+**：MBTI dimension strength sliders / RIASEC 6 维 slider UI / promptFragment 真实 Gemini smoke 验证 / 翻译 i18n。
 
 ---
 
@@ -767,12 +773,12 @@ main (始终可发布)
 
 ## 11. 接力指令
 
-**当前位置**：Phase 0/1/2/3 ✅ Done · **Phase 4 核心 + smoke fix** ✅ merged 到 main · **Phase 2.6 紫微 polish** 在 `feat/phase-2-6-ziwei-polish` 分支（含 schema 升级 / UI 副主星 / 文墨天机 parser / opposingPalaces / career_growth 重写）· **North Star + Tracks/Milestones 已确立**（见 §1.5 + §5.0）。
+**当前位置**：Phase 0/1/2/2.6/2.8/3 ✅ Done · **Phase 4 核心 + smoke fix** ✅ merged 到 main · **North Star + Tracks/Milestones 已确立**（见 §1.5 + §5.0）· **M1 剩余**：Phase 5.5 Apply Assistant L2（Codex 在做）· **Track A Phase 4.5/5 Dexie** 待启动。
 
 **新 session 第一步**：
 1. 读完本文档全文，**特别是 §1.5 North Star + §4 D1-D11 + §5.0 Tracks/Milestones + §10.2 三方分工**。
 2. 读 `doc/scoring-rubric.md` 理解评分系统的 Pass A/B/C 三层架构。
-3. 读 `doc/phase-2-notes.md` / `phase-3-notes.md` / `phase-4-notes.md` 了解每个 Phase 的落地范式。
+3. 读 `doc/phase-2-notes.md` / `phase-2-8-notes.md` / `phase-3-notes.md` / `phase-4-notes.md` 了解每个 Phase 的落地范式。
 4. 浏览 `types.ts`、`src/core/`、`services/`、`src/personas/index.ts`、`src/components/ResumeModal.tsx` 摸清现有范式。
 5. **不要写任何代码**，先：
    a. 用清晰友好的中文向用户确认你理解了 North Star + 当前位置（一两段，避免堆术语）
@@ -802,5 +808,7 @@ main (始终可发布)
 - 不要混用 Codex 本地工作流和 Claude Code 云端工作流（见 §0.0）。
 
 ---
+
+*文档版本 v1.7 · 2026-05-20 · Phase 2.6 / 2.8 状态更新为 Done + Phase 2.8 落地详情 + phase-2-8-notes.md 加入必读列表*
 
 *文档版本 v1.6 · 2026-05-19 · Streaming Flow 隐喻替换 "3 picks / 决策队列"（Spotify Discover 范式）+ 永久不做"过滤数字 / 漏斗 / 桶"硬约束 + Phase 7 主屏 mock 描述重写为单卡聚焦*
