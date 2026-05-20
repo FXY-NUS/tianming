@@ -38,17 +38,23 @@ import {
   sendMessageToJobConsultant,
 } from './services/geminiService';
 import {
-  loadUserContext,
+  DEFAULT_USER_CONTEXT,
   mergeUserContextPatch,
-  saveUserContext,
-  USER_CONTEXT_KEY,
   type UserContextPatch,
 } from './services/userContextStorage';
 import { parseSalaryRangeDraft } from './services/preferenceValidation';
 import { ResumeModal } from './src/components/ResumeModal';
 import { PersonaSection } from './src/components/PersonaSection';
+import { migrateLocalStorageToIndexedDb } from './src/storage/migration';
+import {
+  loadJobsFromIndexedDb,
+  loadUserContextFromIndexedDb,
+  saveJobsToIndexedDb,
+  saveUserContextToIndexedDb,
+  subscribeJobsFromIndexedDb,
+  subscribeUserContextFromIndexedDb,
+} from './src/storage/repository';
 
-const LOCAL_STORAGE_KEY_JOBS = 'career_navigator_jobs_v10';
 const LOCAL_STORAGE_KEY_USAGE = 'career_navigator_usage_v4';
 
 type ProfileTab = 'profile' | 'personas';
@@ -85,9 +91,13 @@ const scorePillClass = (score: number | undefined): string => {
   return 'bg-indigo-600 text-white';
 };
 
+const logStorageError = (error: unknown) => {
+  console.error('IndexedDB storage error', error);
+};
+
 const App = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [userCtx, setUserCtx] = useState<UserContext>(() => loadUserContext());
+  const [userCtx, setUserCtx] = useState<UserContext>(DEFAULT_USER_CONTEXT);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -106,32 +116,53 @@ const App = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const storageReadyRef = useRef(false);
 
   useEffect(() => {
     const fromLocal = localStorage.getItem('GEMINI_API_KEY');
     const fromEnv = (import.meta as any).env?.VITE_GEMINI_API_KEY;
     setHasApiKey(!!(fromLocal || fromEnv));
 
-    const savedJobs = localStorage.getItem(LOCAL_STORAGE_KEY_JOBS);
-    if (savedJobs) setJobs(JSON.parse(savedJobs));
     const savedUsage = localStorage.getItem(LOCAL_STORAGE_KEY_USAGE);
     if (savedUsage) setUsage(JSON.parse(savedUsage));
-  }, []);
 
-  useEffect(() => {
+    let cancelled = false;
+    const unsubscribers: Array<() => void> = [];
+
+    const initialiseStorage = async () => {
+      try {
+        await migrateLocalStorageToIndexedDb();
+        const [initialUserContext, initialJobs] = await Promise.all([
+          loadUserContextFromIndexedDb(),
+          loadJobsFromIndexedDb(),
+        ]);
+
+        if (cancelled) return;
+
+        setUserCtx(initialUserContext);
+        setJobs(initialJobs);
+        storageReadyRef.current = true;
+
+        unsubscribers.push(
+          subscribeUserContextFromIndexedDb((nextUserContext) => {
+            if (!cancelled) setUserCtx(nextUserContext);
+          }, logStorageError),
+          subscribeJobsFromIndexedDb((nextJobs) => {
+            if (cancelled) return;
+            setJobs(nextJobs);
+            setSelectedJob((current) =>
+              current ? (nextJobs.find((job) => job.id === current.id) ?? null) : null,
+            );
+          }, logStorageError),
+        );
+      } catch (error) {
+        logStorageError(error);
+      }
+    };
+
+    void initialiseStorage();
+
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === USER_CONTEXT_KEY) {
-        setUserCtx(loadUserContext());
-      }
-
-      if (event.key === LOCAL_STORAGE_KEY_JOBS) {
-        try {
-          setJobs(event.newValue ? JSON.parse(event.newValue) : []);
-        } catch {
-          // Keep current in-memory jobs if another tab writes malformed data.
-        }
-      }
-
       if (event.key === LOCAL_STORAGE_KEY_USAGE) {
         try {
           setUsage(event.newValue ? JSON.parse(event.newValue) : { flash: 0, pro: 0 });
@@ -142,20 +173,17 @@ const App = () => {
     };
 
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    return () => {
+      cancelled = true;
+      storageReadyRef.current = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY_JOBS, JSON.stringify(jobs));
-  }, [jobs]);
 
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY_USAGE, JSON.stringify(usage));
   }, [usage]);
-
-  useEffect(() => {
-    saveUserContext(userCtx);
-  }, [userCtx]);
 
   const handleSelectKey = async () => {
     const current = localStorage.getItem('GEMINI_API_KEY') || '';
@@ -175,7 +203,21 @@ const App = () => {
   ) => {
     setUserCtx((current) => {
       const patch = typeof patchOrUpdater === 'function' ? patchOrUpdater(current) : patchOrUpdater;
-      return mergeUserContextPatch(current, patch);
+      const next = mergeUserContextPatch(current, patch);
+      if (storageReadyRef.current) {
+        void saveUserContextToIndexedDb(next).catch(logStorageError);
+      }
+      return next;
+    });
+  };
+
+  const persistJobs = (updater: Job[] | ((current: Job[]) => Job[])) => {
+    setJobs((current) => {
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      if (storageReadyRef.current) {
+        void saveJobsToIndexedDb(next).catch(logStorageError);
+      }
+      return next;
     });
   };
 
@@ -242,7 +284,7 @@ const App = () => {
       const results = await batchScreenJobs(unscreened, userCtx);
       trackUsage('flash');
 
-      setJobs((prev) => {
+      persistJobs((prev) => {
         const updated = [...prev];
         results.forEach((res: any) => {
           const index = updated.findIndex((j) => String(j.id) === String(res.id));
@@ -288,7 +330,7 @@ const App = () => {
 
   const toggleFavorite = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, isFavorite: !j.isFavorite } : j)));
+    persistJobs((prev) => prev.map((j) => (j.id === id ? { ...j, isFavorite: !j.isFavorite } : j)));
     if (selectedJob?.id === id) {
       setSelectedJob((prev) => (prev ? { ...prev, isFavorite: !prev.isFavorite } : null));
     }
@@ -335,7 +377,7 @@ const App = () => {
             existingSignatures.add(signature);
           }
         });
-        setJobs((prev) => [...newJobsData, ...prev]);
+        persistJobs((prev) => [...newJobsData, ...prev]);
       } catch (err) {
         alert('导入失败');
       } finally {
@@ -346,7 +388,7 @@ const App = () => {
   };
 
   const updateJobData = (jobId: string, updates: Partial<Job>) => {
-    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)));
+    persistJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)));
     if (selectedJob?.id === jobId) {
       setSelectedJob((prev) => (prev ? { ...prev, ...updates } : null));
     }
@@ -607,7 +649,7 @@ const App = () => {
                   <Trash2
                     onClick={(e) => {
                       e.stopPropagation();
-                      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+                      persistJobs((prev) => prev.filter((j) => j.id !== job.id));
                       if (selectedJob?.id === job.id) setSelectedJob(null);
                     }}
                     size={14}
