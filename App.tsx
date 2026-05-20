@@ -45,6 +45,7 @@ import {
 import { parseSalaryRangeDraft } from './services/preferenceValidation';
 import { ResumeModal } from './src/components/ResumeModal';
 import { PersonaSection } from './src/components/PersonaSection';
+import { ResumeMatchBreakdownCard } from './src/components/ResumeMatchBreakdownCard';
 import { migrateLocalStorageToIndexedDb } from './src/storage/migration';
 import {
   loadJobsFromIndexedDb,
@@ -822,6 +823,10 @@ const App = () => {
                           ))}
                         </div>
                       </div>
+                    )}
+
+                    {selectedMatchScore?.resumeBreakdown && (
+                      <ResumeMatchBreakdownCard breakdown={selectedMatchScore.resumeBreakdown} />
                     )}
 
                     <div className="grid md:grid-cols-2 gap-6">
