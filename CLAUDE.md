@@ -35,9 +35,9 @@
   - `services/geminiService.ts`：从 `window.aistudio` API 改为 `getApiKey()` 助手，读 `localStorage` 或 `import.meta.env.VITE_GEMINI_API_KEY`
   - `App.tsx`：`checkApiKey` / `handleSelectKey` 改为本地 prompt + localStorage 方案
 - 本地 `npm run dev` 可正常调用 Gemini API
-- Phase 0 / 1 / 2 / 3 / **4 核心** 已 merge 进 main：工具链 + UserContext 数据模型 + Persona 插件系统（4 个）+ 简历上传与多模态解析 + **Match Engine + Scoring Engine**（LLM 抽证据 / 代码算分，Pass A/B/C 三层架构）+ Persona UI 接入。详见 `doc/HANDOFF.md` §2、`doc/phase-2/3/4-notes.md`、`doc/scoring-rubric.md`。
+- Phase 0/1/2/2.6/2.8/3/4/4.5/5A ✅ Done（main 状态）：工具链 + UserContext + Persona 插件系统 + MBTI/RIASEC polish + 简历上传解析 + Match/Scoring Engine + 简历 Union 技能覆盖（scoring-only）+ Dexie storage foundation。详见 `doc/HANDOFF.md` §2、`doc/phase-2-8-notes.md`、`doc/scoring-rubric.md`。
 - `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8+ 浏览器端轻量 ML 学个性化权重铺垫。
-- **当前焦点**：Phase 4 smoke-test 收尾（A1 数据丢失 / A2 简历→preferences 数据流 / A3 薪资 slider / A4 unknown 率）已 merged 到 main。Phase 2.6 紫微 polish 在 `feat/phase-2-6-ziwei-polish` 分支（含文墨天机 parser + opposingPalaces）。**North Star + Tracks/Milestones 已确立（见 HANDOFF §1.5 + §5.0）**。下一步按 Milestone 推：M1 → A 收尾 + B 紫微 polish 合并 + Track D Phase 5.5 启动。Codex / Claude Code / Claude Design 三方分工见 HANDOFF §10.2。
+- **当前焦点**：Phase 4.5 UI 层（`ResumeMatchBreakdownCard` 组件已就绪于 `src/components/`）等 Codex Phase 5B Dexie 迁移完成后接入 App.tsx。Codex 负责 Phase 5B + Phase 5.5 Apply Assistant L2。CC 下一步候选：Phase 2.7 六爻插件（设计待定）/ Track D Phase 8 封面信生成。**North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；三方分工见 §10.2。**
 
 ## 三、Tech Stack
 
@@ -57,10 +57,12 @@
 | 0 | V7.0 baseline import + AI Studio 依赖修复 | ✅ Done |
 | 1 | `UserContext` 数据模型重构 + localStorage 迁移脚本 | ✅ Done |
 | 2 | Persona Plugin 系统（MBTI / Holland / Big5 / 紫微斗数隐藏插件）| ✅ Done |
-| 2.6 | Plugin polish（紫微双主星 / MBTI 信效度 / RIASEC 权重）| ⏸ 可并行 |
+| 2.6 | Plugin polish（紫微双主星 / MBTI 信效度 / RIASEC 权重）| ✅ Done · PR #18 |
+| 2.8 | MBTI 去职业刻板标签 + RIASEC 6 维原始分 + 百分比归一化 | ✅ Done · PR #20 |
 | 3 | 简历上传 + Gemini 多模态结构化解析 | ✅ Done |
-| 4 | Match Engine + Scoring Engine（可解释评分 + 统一上下文装配）| ✅ 核心 / ⏳ smoke-test 收尾 |
-| 5 | 存储升级 localStorage → Dexie（同时根治 Phase 4 A1 数据丢失）| ⏳ 下一步 |
+| 4 | Match Engine + Scoring Engine（可解释评分 + 统一上下文装配）| ✅ Done |
+| 4.5 | 简历 Union 技能覆盖对比（scoring-only）+ `ResumeMatchBreakdownCard` UI 组件 | ✅ scoring Done · UI 待接入 |
+| 5 | 存储升级 localStorage → Dexie（同时根治 Phase 4 A1 数据丢失）| ⏳ 5A foundation ✅ · 5B 迁移 Codex 进行中 |
 | 5.5 | Gemini 多模态截图导入 JD（可选）| ⏸ 已搁置 |
 | 6 | 浏览器扩展（MV3）+ 后端代理雏形（API Key 移出前端）| |
 | 7 | UI 整体调整 + 简历多版本管理 | |
