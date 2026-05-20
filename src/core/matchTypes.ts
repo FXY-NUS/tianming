@@ -114,6 +114,43 @@ export interface ScoringInput {
   modelId?: string;
 }
 
+/**
+ * Per-resume skill coverage entry. Phase 4.5: how well does each of the user's
+ * resumes cover the JD skills the LLM identified? Always computed against the
+ * union of (matchedSkills + missingSkills + transferableSkills) — i.e. every
+ * JD-required skill surfaced by the LLM, regardless of whether the active
+ * resume had it.
+ */
+export interface ResumeSkillCoverage {
+  resumeId: string;
+  resumeLabel: string;
+  /** JD skills found in this resume (skills.hard/tools/languages/soft + projects.tech). */
+  coveredSkills: string[];
+  /** JD skills NOT found in this resume. */
+  missingSkills: string[];
+  /** Length of coveredSkills, used as the primary sort key. */
+  coverageCount: number;
+  /** coveredSkills.length / totalJdSkills, rounded to 2 decimals (0..1). */
+  coverageRatio: number;
+}
+
+/**
+ * Phase 4.5 — cross-resume comparison. The犹豫型 user's question is
+ * "which of my resumes is best for this JD?". We answer with a deterministic
+ * per-resume hit count against the JD skills the LLM identified. UI integration
+ * is intentionally deferred (see HANDOFF §Phase 4.5).
+ */
+export interface ResumeMatchBreakdown {
+  /** Resume id with the highest coverageCount (tiebreak: higher coverageRatio). */
+  bestResumeId: string;
+  /** The user's currently active resume, for UI comparison. */
+  activeResumeId?: string;
+  /** Total distinct JD skills considered (dedup case-insensitive). */
+  totalJdSkills: number;
+  /** Per-resume entries, sorted by coverageCount desc then coverageRatio desc. */
+  perResume: ResumeSkillCoverage[];
+}
+
 export interface MatchScore {
   overall: number;
   label: MatchLabel;
@@ -124,6 +161,8 @@ export interface MatchScore {
   providerId?: string;
   modelId?: string;
   createdAt: string;
+  /** Optional Phase 4.5 cross-resume comparison. Present when evidence + resumes exist. */
+  resumeBreakdown?: ResumeMatchBreakdown;
 }
 
 export interface MatchFeedbackRecord {
