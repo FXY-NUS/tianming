@@ -50,6 +50,7 @@
 ### Pass B: LLM 证据抽取层
 
 输入：完整 JD + active resume + preferences/personas。
+**Phase 4.6 起**：Pass B 证据池升级为**所有简历的 union**（skills + projects + education 维度做并集，experience 仍按 active resume）。每条 evidence 允许尾标 `（来源: <resume label>）`；`SkillEvidence.sourceResumeIds?: string[]` 字段同步。详见 HANDOFF §4 D12 + Phase 4.6 章节。
 
 输出：
 - `matchedSkills[]`
@@ -58,11 +59,12 @@
 - `cultureSignals[]`
 - `growthReasons[]`
 - 可选 `personaReasons[]`
+- **Phase 4.6 起** `recommended_resume?: { resumeId, label, reasoning, edits_suggestion: string[] }`（仅 Pro 深审输出，Triage 不出）
 
 特点：
 - 使用 Gemini `responseSchema`。
 - 客户端二次校验。
-- 不输出最终总分。
+- 不输出最终总分（铁律 1 守住——D12 升级后铁律不破）。
 
 ### Pass C: 代码聚合层
 
@@ -125,7 +127,10 @@ Phase 4 只预留 `MatchFeedbackRecord`，不训练模型。
 
 ---
 
-## 6. 与 Phase 8+ ML 反馈闭环的衔接
+## 6. Phase 8.x · 反向赋能（ML 反馈闭环）
+
+> **术语澄清（v1.8 起）**：本节专指 **ML 学权重**（Track F · Phase 8.x），跟 Phase 8（Cover Letter / 简历针对性优化建议 · Track D 文案反向赋能）**不是一回事**。详见 HANDOFF §5 Phase 8 / Phase 8.x 章节。
+
 
 `MatchFeedbackRecord` 类型已经在 `src/core/matchTypes.ts` 定义，并通过 `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 在持久化层预留（v2 storage 自动 back-fill 为 `[]`）。
 
