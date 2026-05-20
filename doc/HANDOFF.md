@@ -1,4 +1,4 @@
-# Tianming · 项目交接文档 v1.7
+# Tianming · 项目交接文档 v1.8
 
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
@@ -276,6 +276,17 @@ Web App / Extension
 **关键产品语**（写进 UI 提示 + Chrome Web Store 描述）：
 > Tianming 不替你提交。所有投递都是你自己手动点的。
 
+### D12. Pro Audit Resume Union Strategy（Phase 4.6）
+
+Pro 深审装配从「单份激活简历」改为「所有简历的 union」，并在输出里给推荐简历建议。**4 个子决策（不可回退）**：
+
+1. **Union 粒度**：并 `skills` + `projects` + `education`；`experience` 仍按 `activeResumeId`（避免时间冲突 / bullet 重复）。
+2. **标注**：每条 evidence（pros / cons / skill）尾部允许标 `（来源: <resume label>）`；`SkillEvidence.sourceResumeIds?: string[]` 字段同步。
+3. **防通胀约束**：某 skill 只在 1/N 简历里出现且**不是 active 简历**时，scoring engine 把该条贡献 ×0.5（Q3）。`rubricVersion` 因此 bump 为 `rubric-v1.1`。
+4. **推荐简历**：审计层用 union 跑分 + narrative，输出 `recommended_resume = { resumeId, label, reasoning, edits_suggestion: string[] }`。**LLM 仍不出 overall / judgment 分数**——铁律 1 不破。
+
+**铁律守门**：D12 升级后 6 条评分铁律全部保留——Gemini 输出 evidence + source + recommended_resume narrative，最终分数仍由 `src/core/scoringEngine.ts` 算。
+
 ### D10. 多 Provider 抽象（**预留，不实现**）
 为防止"换模型导致前后打分不一致"，未来允许接 Claude / OpenAI / DeepSeek，但实现服从以下约束：
 
@@ -306,12 +317,12 @@ interface LlmProvider {
 
 | Track | 内容 | 主做方 |
 |---|---|---|
-| **A. 数据 / 评分 / 存储** | Phase 4 收尾 · Phase 5 Dexie · 4.5 简历 Union | **Codex 主做**（本地浏览器 + IndexedDB 调试） |
+| **A. 数据 / 评分 / 存储** | Phase 4 收尾 · 4.5 Union 评分 · 4.6 Pro 深审 Union prompt · Phase 5 Dexie | **Codex 主做**（本地浏览器 + IndexedDB 调试） |
 | **B. Persona / 插件** | 2.6 紫微 polish · 2.7 六爻 · 2.8 MBTI+RIASEC | **Claude Code 主做**（schema/prompt/test） |
 | **C. 浏览器扩展** | Phase 6.0-6.4 + 后端代理雏形 | **Codex 主做**（Chrome 加载本地扩展调试） |
-| **D. 投递助手** | 5.5 L2 剪贴板 · 6.5 L3 overlay | **Claude Code 主写代码 → Codex 本地 UX 验收** |
+| **D. 投递助手 / 文案反向赋能** | 5.5 L2 剪贴板 · 6.5 L3 overlay · **Phase 8 Cover Letter / 简历针对性优化建议**（注：学校已有项目组做"AI 改简历"，非 unique value，延后） | **Claude Code 主写代码 → Codex 本地 UX 验收** |
 | **E. UI 设计 + 实现** | Phase 7 整体重做（围绕"3 张牌" + Apply Assistant 重新设计） | **Claude Design 设计稿 → Claude Code/Codex 翻译为 React 组件** |
-| **F. 反向赋能** | Phase 8 Cover Letter · 简历针对性优化（**注**：学校已有项目组做"AI 改简历"，非 unique value，延后） | Claude Code |
+| **F. 反向赋能 / ML 反馈闭环** | **Phase 8.x ML 学权重**（OLS / Ridge 浏览器端学个性化 rubric · 跟 `doc/scoring-rubric.md` §6 对齐 · **不同于 Track D 的 Cover Letter**）| Claude Code + Super Grok（RFC 草案）|
 
 #### Milestones（demo 锚点）
 
@@ -434,8 +445,33 @@ interface LlmProvider {
 
 ---
 
-### Phase 4.5 — 简历 Union 匹配 ⏸ Backlog（小，半天）
+### Phase 4.5 — 简历 Union 匹配（scoring-only） ✅ Done · PR #27 merged
 **Track A**：scoring engine 在 active resume 一份的基础上，**用所有 ResumeProfile.skills 的并集做匹配**，结果显示哪一份命中。**针对犹豫型用户**——他们不知道用哪份简历投，我们自动选最匹配的。
+
+**已落地**：
+- `src/core/scoringEngine.ts` `computeResumeBreakdown(user, evidence)` 在 skills/projects.tech 层做 union 统计 + 每份简历命中分。
+- `src/components/ResumeMatchBreakdownCard.tsx` UI 组件展示 best/active resume 对比（已在 PR #27 接入 App.tsx audit card）。
+- ⚠️ 当时 LLM prompt 层（Pass B + PRO_AUDIT_PROMPT）**未跟上 union**——Pass C 用 union 算分但 Gemini 看到的还是单份 active resume。Phase 4.6 修复这个分歧。
+
+---
+
+### Phase 4.6 — Pro 深审 Union prompt + 推荐简历 ⏳ 进行中
+**Track A 衍生**：把 Pro 深审 prompt 也升级为 union（修 Phase 4.5 的分歧），并让 Gemini 输出"用哪份简历投这个 JD" + "可以这样改"建议——对齐 North Star（让犹豫型用户 1 秒决定）。
+
+**核心决策**：见 §4 D12（4 个子决策不可回退）。
+
+**实现拆解**（Codex 在 `feat/phase-4-6-pro-audit-union` 分支执行）：
+- **2a** `constants.tsx`：新增 `buildResumeUnionSection`，替代 `buildActiveResumeSection` 在 `PRO_AUDIT_PROMPT` 里的位置。单份 / 无简历的退化分支保留。
+- **2b** `PRO_AUDIT_PROMPT` schema 扩展：加 `recommended_resume` 字段 + 重复"不出 overall / judgment"铁律。
+- **2c** `services/jobEvidenceExtractor.ts` Pass B：喂 union markdown，`SkillEvidence.sourceResumeIds?: string[]` 容错降级。
+- **2d** `types.ts` / `src/core/matchTypes.ts` 字段扩充 + `scoringVersion` bump 到 `phase4-scoring-v2.0` + `rubricVersion` bump 到 `rubric-v1.1`。
+- **2e** `src/core/scoringEngine.ts` `applyUnionWeightPenalty`：实施 D12 Q3 防通胀约束。
+- **2f** `App.tsx`：`handleDeepAudit` 后非阻塞 banner "建议用 XXX 简历" + [切换] + [看建议]（视觉等 Claude Design 设计稿）。
+- **2g** `ResumeMatchBreakdownCard.tsx`：顺手展示 `recommended_resume.reasoning`。
+
+**工期**：1-2 天（Codex 代码 + Claude Design 1 天视觉 + Super Grok prompt review）。
+
+**验收**：见 `doc/briefs/claude-design-phase-4-6-recommended-resume.md` 和 `doc/briefs/grok-day-1-prompt-review-ml-rfc.md` 任务包末尾的清单。**反通胀关键测试**：构造一份"什么都会"的简历 + 一份单一方向简历，对同一 JD 跑 audit，看分数有没有 union 通胀。
 
 ---
 
@@ -551,14 +587,35 @@ interface LlmProvider {
 
 ---
 
-### Phase 8 — 反向利用（Cover Letter / 简历优化）
-**目标**：基于"用户简历 + 单 JD"输出 Cover Letter 和针对性简历优化建议。
+### Phase 8 — Cover Letter / 简历针对性优化（Track D 延伸）
+**目标**：基于"用户简历 + 单 JD"输出 Cover Letter 和针对性简历优化建议。**注意**：本 Phase 是**文案反向赋能**（生成可投递文本），跟 Phase 8.x 的**评分反向赋能**（ML 学权重）是两件事——v1.7 之前的文档把两者混在一行，v1.8 拆开。
 
 **实现**：
 - Pro 深审完成后多出两个 action：「生成 Cover Letter」「优化此简历针对此 JD」
 - 输出可编辑、可一键复制、可导出 Markdown
 
+**Track 归属**：Track D（投递助手 / 文案反向赋能）—— 跟 Phase 5.5 / 6.5 是同一 Track 的延伸。
+
 **工期**：1-2 天
+
+---
+
+### Phase 8.x — 反向赋能 / ML 反馈闭环（Track F）
+**目标**：用 `UserContext.feedbackRecords` 在浏览器端学个性化评分权重，从默认 v1 rubric 演化为 `rubric-v2-personalized-<userId>`。详见 `doc/scoring-rubric.md` §6。
+
+**触发条件**：单用户累积 ≥ 30 条 `MatchFeedbackRecord`（1-5 星 + save / reject / apply / ignore）。
+
+**算法候选**：OLS / Ridge / 在线学习 / 贝叶斯逻辑回归——具体取舍见 Super Grok 出的 RFC 草案（`doc/briefs/grok-replies/day-1-phase-8x-ml-rfc.md`，进行中）。
+
+**铁律守门**：
+- 学习全部在浏览器内进行（D6 隐私红线，不上云）。
+- 学到的 weight 不让 LLM 算 overall（评分铁律 1）。
+- Persona 权重学完仍走 `clampPersonaWeight` 保 ≤15%（评分铁律 5）。
+- `rubricVersion` 命名 `rubric-v2-personalized-<userId>-<hash>`，旧的 `MatchFeedbackRecord` 跟 rubric 解耦不破坏（评分铁律 4）。
+
+**Track 归属**：Track F（反向赋能 / ML 反馈闭环）—— 跟 Phase 8 的 Cover Letter **不是一回事**。
+
+**工期**：未估（先出 RFC 再拆 commit 级清单）。
 
 ---
 
@@ -734,24 +791,39 @@ main (始终可发布)
 - 遇到与本文档冲突的情况**停下来询问**，不要自作主张改方向
 - 讲解技术时优先用类比和具象例子，避免堆砌术语
 
-### 10.2 三方分工矩阵（Codex / Claude Code / Claude Design）
+### 10.2 五方分工矩阵（用户 / Codex / Claude Code / Claude Design / Super Grok）
+
+**角色定调**（v1.8 拍板）：
+
+- **总监**：用户（fxy-nus）—— 决策 / 拍板 / 本地验收。
+- **总监助手 / 守门 / 总规划**：Claude Code（我）—— 6 条评分铁律 / North Star / 文档一致性 / PR diff / 任务 brief。
+- **执行（主力苦力）**：Codex —— 代码改造 + 本地浏览器/IndexedDB/扩展调试。
+- **设计**：Claude Design —— 视觉 / UX / Phase 7 整体 + 单 Phase 视觉规范（限时会员窗口内启动）。
+- **推理 + 行为预测 + RFC**：Super Grok —— Gemini prompt review / 算法 RFC / 跨章节文档审计 / 玄学 plugin 设计参考。
+- **不再列入分工**：Cursor。
+
+**任务类别 × 主做**：
 
 | 任务类别 | 主做 | 备注 |
 |---|---|---|
-| Track A 数据/评分/存储（Phase 4/4.5/5）| **Codex** | 需要本地浏览器 + localStorage/IndexedDB + 多 tab + Windows 验证 |
-| Track B Persona 插件（Phase 2.6/2.7/2.8）| **Claude Code** | schema / prompt / 测试 / 文档，云端做高效 |
+| Track A 数据/评分/存储（Phase 4/4.5/4.6/5）| **Codex** | 需要本地浏览器 + localStorage/IndexedDB + 多 tab + Windows 验证 |
+| Track B Persona 插件（Phase 2.6/2.7/2.8）| **Claude Code**（+ Grok 玄学背景知识参考） | schema / prompt / 测试 / 文档，云端做高效 |
 | Track C 浏览器扩展（Phase 6）| **Codex** | 需要 Chrome 加载本地扩展调试 |
-| Track D 投递助手（Phase 5.5/6.5）| **Claude Code 主写 → Codex 本地 UX 验收** | 代码逻辑在云端做，最终交互体验本地确认 |
-| Track E UI 设计 + 实现（Phase 7）| **Claude Design 出 mock → Claude Code/Codex 翻译实现** | 见 Phase 7 工作流；mock 存 `doc/design/` |
-| Track F 反向赋能（Phase 8）| **Claude Code** | 偏 prompt + schema 工作 |
+| Track D 投递助手 + Cover Letter（Phase 5.5/6.5/8）| **Claude Code 主写 → Codex 本地 UX 验收** | 代码逻辑在云端做，最终交互体验本地确认 |
+| Track E UI 设计 + 实现（Phase 7 + 单 Phase 视觉规范）| **Claude Design 出 mock → Claude Code/Codex 翻译实现** | 见 Phase 7 工作流；mock 存 `doc/design/` |
+| Track F 反向赋能 / ML 反馈闭环（Phase 8.x）| **Claude Code + Super Grok 出 RFC** | Grok 出算法 RFC 草案，CC 守 6 条铁律 + 拆 commit 级清单 |
+| **prompt 设计行为预测 review**（Pro audit / scoring）| **Super Grok** | Grok 擅长预测 Gemini 是否绕开 schema / 偷出 overall 分 |
+| **Phase 启动 brief 撰写**（北极星 + 边界 + 验收）| **Claude Code** | 按 §10.4 模板；新接入的 agent 先读 brief 再动 |
 | HANDOFF / 文档沉淀 | **Claude Code** | 文档整理云端做效率高 |
 | PR 合 main 后本地同步 | **Codex** | 本地 workspace 职责，云端不需要 |
 | 真实 smoke 测试（用户填真数据 + 测端到端 UX）| **用户 + Codex 本地** | 云端 Claude Code 跑不动 dev server 给用户看 |
+| PR review + 6 条铁律守门 | **Claude Code** | 代码/文档 PR 的 sign-off 责任 |
 
 **冲突避免**：
 - 同一 PR 不同时开两个 agent 改重叠文件——开始之前先 grep 一下另一方分支的活动
 - HANDOFF.md 改动统一让 Claude Code 处理
 - 设计稿改动统一从 Claude Design 出，不要 Codex/Claude Code 直接修 mock
+- Super Grok 不写代码 / 不改 prompt / 不改 rubric——只出 markdown 报告（防多个 agent 抢 codebase 写权）
 
 ### 10.3 Claude Design 工作流操作指南
 
@@ -769,14 +841,63 @@ main (始终可发布)
 
 **用户已有进度**：用户已经跑了"天命导航仪 Design System"——含品牌色板（bg-void / deep / surface / elevated / rim）、Typography（京华老宋体 / IM Fell English SC / LXGW WenKai）、按钮组件（深金色边框，glow-azure 强调）。这套设计系统**优先级 = 视觉基线**，后续屏 mock 必须沿用同一套 token。
 
+### 10.4 任务分发 brief 模板（v1.8 新增）
+
+每个 Phase 启动前由 **Claude Code（总监助手）** 用本模板写一份 brief，存放 `doc/briefs/<agent>-<phase-or-topic>.md`。任何新接入的 agent（Codex / Claude Design / Super Grok / 未来 DeepSeek 等）**先读 brief 再动手**。
+
+**模板结构**：
+
+```markdown
+# Brief · <Agent 名> · <Phase / Topic>
+
+> 会员窗口 / 紧急度：<如 "Claude Design 1 天" / "Super Grok 3 天" / "Codex 持续">
+> 接收者：<Agent 显式角色>
+> 发出者：Claude Code（总监助手）经用户拍板
+
+## 1. North Star check（必读）
+> "帮一个怕错的人按下投递键。"
+- 本次任务要解决的具体卡点：<...>
+- 成功标志：<用户的可观测行为变化>
+
+## 2. 背景（已经做完的 / 还在做的）
+- Phase X 状态 + PR 链接
+- 跟本任务的依赖关系
+
+## 3. 输入 schema / 字段（让 agent 看得到要操作的具体字段）
+<给完整 ts 类型 / JSON 结构 / 输入材料路径>
+
+## 4. 输出（你今天要交付的东西）
+- 文件路径 + 形式（markdown / 设计稿 / 代码 diff / RFC）
+- 字数 / 长度上限（防止流水账）
+
+## 5. 边界（明确不要做）
+- ❌ 列具体的 scope creep 防线
+- ❌ 列违反 6 条评分铁律的事项
+
+## 6. 输入材料（agent 需要读什么）
+| 文件 | 重点章节 |
+
+## 7. 验收清单
+- [ ] North Star check 过
+- [ ] 6 条铁律 check 过
+- [ ] 边界没破
+- [ ] 字段映射 / 测试覆盖完整
+```
+
+**强制规则**：
+1. **brief 必含 North Star check + 边界 + 验收三段**——少一段都不发。
+2. **brief 字数控制**：≤ 300 行。超过说明任务太大，先拆 Phase。
+3. **brief 放 `doc/briefs/`**，版本号写在文末，agent 完成后把产出也放同目录或子目录（如 `doc/briefs/grok-replies/`）。
+4. **新 agent 接入流程**：用户先把 brief 内容复制到 agent 输入框 → agent 出 markdown 报告 → 用户拿回报告由 Claude Code 守门 review → 入库。
+
 ---
 
 ## 11. 接力指令
 
-**当前位置**：Phase 0/1/2/2.6/2.8/3 ✅ Done · **Phase 4 核心 + smoke fix** ✅ merged 到 main · **North Star + Tracks/Milestones 已确立**（见 §1.5 + §5.0）· **M1 剩余**：Phase 5.5 Apply Assistant L2（Codex 在做）· **Track A Phase 4.5/5 Dexie** 待启动。
+**当前位置**：Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done · main 上含 scoring engine + resume union 评分 + ResumeMatchBreakdownCard UI（PR #27）+ Dexie 存储（PR #26）· **Phase 4.6 ⏳ 进行中**（Codex 在 `feat/phase-4-6-pro-audit-union` 实施 Pro 深审 union prompt + recommended_resume；Claude Design / Super Grok 限时会员窗口任务包见 `doc/briefs/`）· **M1 剩余**：Phase 4.6 合并 + Phase 5.5 Apply Assistant L2 + 简历多版本切换 UX。
 
 **新 session 第一步**：
-1. 读完本文档全文，**特别是 §1.5 North Star + §4 D1-D11 + §5.0 Tracks/Milestones + §10.2 三方分工**。
+1. 读完本文档全文，**特别是 §1.5 North Star + §4 D1-D12 + §5.0 Tracks/Milestones + §10.2 五方分工 + §10.4 任务分发 brief 模板**。
 2. 读 `doc/scoring-rubric.md` 理解评分系统的 Pass A/B/C 三层架构。
 3. 读 `doc/phase-2-notes.md` / `phase-2-8-notes.md` / `phase-3-notes.md` / `phase-4-notes.md` 了解每个 Phase 的落地范式。
 4. 浏览 `types.ts`、`src/core/`、`services/`、`src/personas/index.ts`、`src/components/ResumeModal.tsx` 摸清现有范式。
@@ -808,6 +929,8 @@ main (始终可发布)
 - 不要混用 Codex 本地工作流和 Claude Code 云端工作流（见 §0.0）。
 
 ---
+
+*文档版本 v1.8 · 2026-05-20 · D12 Pro Audit Union Strategy + Phase 4.5 状态升 Done + Phase 4.6 章节 + Phase 8 拆分（Cover Letter 归 Track D · Phase 8.x ML 反馈闭环归 Track F）+ §10.2 三方→五方分工矩阵（加 Super Grok）+ §10.4 任务分发 brief 模板（限时会员窗口起紧急触发）*
 
 *文档版本 v1.7 · 2026-05-20 · Phase 2.6 / 2.8 状态更新为 Done + Phase 2.8 落地详情 + phase-2-8-notes.md 加入必读列表*
 

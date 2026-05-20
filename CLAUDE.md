@@ -11,9 +11,10 @@
 
 1. `doc/agent-workflow.md`：判断运行环境，不混用本地/云端规则。
 2. `claudecode.md`：Claude Code 云端开发 SOP。
-3. `doc/HANDOFF.md` v1.5：项目总交接（**§1.5 North Star + §4 D1-D11 + §5.0 Tracks/Milestones + §10.2 三方分工 + §11 接力指令的 6 条评分铁律必读**）。
-4. `doc/scoring-rubric.md`：Phase 4 评分体系（Pass A/B/C 三层 + LLM 抽证据 / 代码算分根原则）。
+3. `doc/HANDOFF.md` v1.8：项目总交接（**§1.5 North Star + §4 D1-D12 + §5.0 Tracks/Milestones + §10.2 五方分工 + §10.4 任务分发 brief 模板 + §11 接力指令的 6 条评分铁律必读**）。
+4. `doc/scoring-rubric.md`：Phase 4 评分体系（Pass A/B/C 三层 + LLM 抽证据 / 代码算分根原则 + §6 Phase 8.x ML 反馈闭环方向）。
 5. 当前 Phase notes，例如 Phase 4 期间读 `doc/phase-4-notes.md`，Phase 5 期间读 `doc/phase-5-notes.md`（如果存在）。
+6. `doc/briefs/`：限时会员窗口给 Claude Design / Super Grok 的任务包；未来新 agent 接入也走这里。
 
 关键提醒：
 
@@ -35,9 +36,9 @@
   - `services/geminiService.ts`：从 `window.aistudio` API 改为 `getApiKey()` 助手，读 `localStorage` 或 `import.meta.env.VITE_GEMINI_API_KEY`
   - `App.tsx`：`checkApiKey` / `handleSelectKey` 改为本地 prompt + localStorage 方案
 - 本地 `npm run dev` 可正常调用 Gemini API
-- Phase 0/1/2/2.6/2.8/3/4/4.5/5A ✅ Done（main 状态）：工具链 + UserContext + Persona 插件系统 + MBTI/RIASEC polish + 简历上传解析 + Match/Scoring Engine + 简历 Union 技能覆盖（scoring-only）+ Dexie storage foundation。详见 `doc/HANDOFF.md` §2、`doc/phase-2-8-notes.md`、`doc/scoring-rubric.md`。
-- `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8+ 浏览器端轻量 ML 学个性化权重铺垫。
-- **当前焦点**：Phase 4.5 UI 层（`ResumeMatchBreakdownCard` 组件已就绪于 `src/components/`）等 Codex Phase 5B Dexie 迁移完成后接入 App.tsx。Codex 负责 Phase 5B + Phase 5.5 Apply Assistant L2。CC 下一步候选：Phase 2.7 六爻插件（设计待定）/ Track D Phase 8 封面信生成。**North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；三方分工见 §10.2。**
+- Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done（main 状态）：工具链 + UserContext + Persona 插件系统 + MBTI/RIASEC polish + 简历上传解析 + Match/Scoring Engine + 简历 Union 技能覆盖 + `ResumeMatchBreakdownCard` UI 接入（PR #27）+ Dexie 存储完整迁移（PR #26）。详见 `doc/HANDOFF.md` §2、`doc/phase-2-8-notes.md`、`doc/scoring-rubric.md`。
+- `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8.x（**ML 学权重，归 Track F**）浏览器端轻量学习铺垫。
+- **当前焦点**：**Phase 4.6 进行中**（Pro 深审 union prompt + `recommended_resume` 字段；Codex 在 `feat/phase-4-6-pro-audit-union` 实施 · 决策见 HANDOFF §4 D12 · Claude Design 1 天紧急做视觉 + Super Grok 3 天做 prompt review + Phase 8.x ML RFC，brief 见 `doc/briefs/`）。CC 下一步候选（Phase 4.6 合 main 后）：Phase 5.5 Apply Assistant L2 / Phase 2.7 六爻插件（设计待定）/ Phase 8 Cover Letter 文案。**North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；五方分工见 §10.2；brief 模板见 §10.4。**
 
 ## 三、Tech Stack
 
@@ -61,12 +62,14 @@
 | 2.8 | MBTI 去职业刻板标签 + RIASEC 6 维原始分 + 百分比归一化 | ✅ Done · PR #20 |
 | 3 | 简历上传 + Gemini 多模态结构化解析 | ✅ Done |
 | 4 | Match Engine + Scoring Engine（可解释评分 + 统一上下文装配）| ✅ Done |
-| 4.5 | 简历 Union 技能覆盖对比（scoring-only）+ `ResumeMatchBreakdownCard` UI 组件 | ✅ scoring Done · UI 待接入 |
-| 5 | 存储升级 localStorage → Dexie（同时根治 Phase 4 A1 数据丢失）| ⏳ 5A foundation ✅ · 5B 迁移 Codex 进行中 |
-| 5.5 | Gemini 多模态截图导入 JD（可选）| ⏸ 已搁置 |
+| 4.5 | 简历 Union 技能覆盖对比（scoring + UI）+ `ResumeMatchBreakdownCard` 接入 | ✅ Done · PR #27 |
+| 4.6 | Pro 深审 union prompt + `recommended_resume`（推荐简历 + edits_suggestion） | ⏳ 进行中（Codex 代码 + Design 视觉 + Grok prompt review）|
+| 5 | 存储升级 localStorage → Dexie（同时根治 Phase 4 A1 数据丢失）| ✅ Done · PR #26 |
+| 5.5 | Apply Assistant L2（投递助手 · 结构化字段一键复制）| ⏸ 排队（4.6 合后）|
 | 6 | 浏览器扩展（MV3）+ 后端代理雏形（API Key 移出前端）| |
 | 7 | UI 整体调整 + 简历多版本管理 | |
-| 8 | 反向利用：Cover Letter 生成 / 简历针对性优化建议 + Phase 8.x ML 权重学习 | |
+| 8 | Cover Letter 生成 / 简历针对性优化建议（**Track D 文案反向赋能**） | |
+| 8.x | **反向赋能 / ML 反馈闭环**（OLS / Ridge 浏览器端学权重 · Track F · 跟 Phase 8 区分）| |
 | 9 | 云同步（可选，Supabase/Firebase）| |
 | 10 | PWA + Tauri 桌面端打包 | |
 | 11 | 文档完善 + 部署上线 + Chrome Web Store 上架 | |
