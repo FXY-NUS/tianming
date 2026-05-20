@@ -14,11 +14,40 @@ export const HOLLAND_DESCRIPTIONS: Record<HollandLetter, string> = {
   C: 'Conventional 常规型 · 组织、数据、规则、稳定',
 };
 
+/** Short labels for compact UI / prompt lines. */
+export const HOLLAND_SHORT_LABEL: Record<HollandLetter, string> = {
+  R: '实际型',
+  I: '研究型',
+  A: '艺术型',
+  S: '社会型',
+  E: '企业型',
+  C: '常规型',
+};
+
+/**
+ * Optional 6-dimension raw scores (e.g. from O*NET Interest Profiler / SDS).
+ * No fixed scale — we normalise relative weight by sum.
+ * Empty / undefined letters mean "not measured" rather than "score = 0".
+ */
+export const HollandScoresSchema = z
+  .object({
+    R: z.number().int().nonnegative().optional(),
+    I: z.number().int().nonnegative().optional(),
+    A: z.number().int().nonnegative().optional(),
+    S: z.number().int().nonnegative().optional(),
+    E: z.number().int().nonnegative().optional(),
+    C: z.number().int().nonnegative().optional(),
+  })
+  .optional();
+
+export type HollandScores = z.infer<typeof HollandScoresSchema>;
+
 export const HollandDataSchema = z
   .object({
     primary: HollandLetterSchema,
     secondary: HollandLetterSchema.optional(),
     tertiary: HollandLetterSchema.optional(),
+    scores: HollandScoresSchema,
     note: z.string().optional(),
   })
   .refine(
