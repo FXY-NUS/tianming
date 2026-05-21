@@ -17,10 +17,10 @@ import type {
   SkillEvidence,
 } from './matchTypes';
 
-export const SCORING_VERSION = 'phase4-scoring-v1.3';
+export const SCORING_VERSION = 'phase4-scoring-v2.0';
 
 export const DEFAULT_SCORING_RUBRIC: ScoringRubric = {
-  version: 'rubric-v1',
+  version: 'rubric-v1.1',
   personaWeightCap: 0.15,
   dimensions: [
     { key: 'experience', label: 'Experience fit', weight: 0.2, enabled: true },
@@ -39,7 +39,11 @@ const UNKNOWN = undefined;
 export function buildMatchScore(input: ScoringInput): MatchScore {
   const rubric = clampPersonaWeight(input.rubric ?? DEFAULT_SCORING_RUBRIC);
   const ruleDimensions = buildRuleDimensions(input.job, input.user, input.hardFilters ?? {});
-  const evidenceDimensions = buildEvidenceDimensions(input.evidence);
+  const evidenceDimensions = buildEvidenceDimensions(
+    input.evidence,
+    input.user.activeResumeId,
+    input.user.resumes,
+  );
   const dimensions = mergeDimensions(ruleDimensions, evidenceDimensions);
   const weighted = aggregateDimensions(dimensions, rubric.dimensions);
   const hardRejected = dimensions.some((dimension) => dimension.hardFail);
@@ -134,7 +138,7 @@ function collectJdSkills(evidence: ExtractedEvidence): string[] {
   return out;
 }
 
-function collectResumeSkills(resume: ResumeProfile): Set<string> {
+export function collectResumeSkills(resume: ResumeProfile): Set<string> {
   const set = new Set<string>();
   const add = (value: string) => {
     const key = lower(value.trim());
@@ -188,7 +192,11 @@ export function buildRuleDimensions(
   ];
 }
 
-export function buildEvidenceDimensions(evidence?: ExtractedEvidence): DimensionScore[] {
+export function buildEvidenceDimensions(
+  evidence?: ExtractedEvidence,
+  activeResumeId?: string,
+  allResumes: ResumeProfile[] = [],
+): DimensionScore[] {
   if (!evidence) {
     return [
       unknownDimension('skill', 'Skill match', 'LLM skill evidence has not been extracted yet.'),
@@ -207,7 +215,7 @@ export function buildEvidenceDimensions(evidence?: ExtractedEvidence): Dimension
   }
 
   return [
-    scoreSkillEvidence(evidence),
+    scoreSkillEvidence(evidence, activeResumeId, allResumes),
     scoreDirectEvidence(
       'culture',
       'Culture signal',
@@ -489,15 +497,32 @@ function scoreAvoidKeywords(
   };
 }
 
-function scoreSkillEvidence(evidence: ExtractedEvidence): DimensionScore {
-  const matched = weightedSkillCount(evidence.matchedSkills, 1);
-  const transferable = weightedSkillCount(evidence.transferableSkills, 0.5);
+function scoreSkillEvidence(
+  evidence: ExtractedEvidence,
+  activeResumeId?: string,
+  allResumes: ResumeProfile[] = [],
+): DimensionScore {
+  const matched = weightedSkillCount(evidence.matchedSkills, 1, activeResumeId, allResumes, true);
+  const transferable = weightedSkillCount(
+    evidence.transferableSkills,
+    0.5,
+    activeResumeId,
+    allResumes,
+    true,
+  );
+  const matchedDenominator = weightedSkillCount(evidence.matchedSkills, 1);
+  const transferableDenominator = weightedSkillCount(evidence.transferableSkills, 0.5);
   const missing = weightedSkillCount(evidence.missingSkills, 1);
-  const denominator = matched + transferable + missing;
+  const denominator = matchedDenominator + transferableDenominator + missing;
 
   if (denominator <= 0) {
     return unknownDimension('skill', 'Skill match', 'LLM returned no skill evidence.');
   }
+
+  const unionPenaltyCount = [
+    ...applyUnionWeightPenalty(evidence.matchedSkills, activeResumeId, allResumes),
+    ...applyUnionWeightPenalty(evidence.transferableSkills, activeResumeId, allResumes),
+  ].filter((multiplier) => multiplier < 1).length;
 
   const score = clampScore(((matched + transferable) / denominator) * 100);
   return {
@@ -510,9 +535,14 @@ function scoreSkillEvidence(evidence: ExtractedEvidence): DimensionScore {
       ...formatSkills('Transferable', evidence.transferableSkills),
       ...formatSkills('Missing', evidence.missingSkills),
     ],
-    warnings: evidence.missingSkills.some((skill) => skill.priority === 'must')
-      ? ['Missing at least one must-have skill.']
-      : [],
+    warnings: [
+      ...(evidence.missingSkills.some((skill) => skill.priority === 'must')
+        ? ['Missing at least one must-have skill.']
+        : []),
+      ...(unionPenaltyCount > 0
+        ? ['Some matched skills only appear in non-active resumes and were discounted.']
+        : []),
+    ],
   };
 }
 
@@ -551,12 +581,42 @@ function scoreDirectEvidence(
   };
 }
 
-function weightedSkillCount(skills: SkillEvidence[], baseWeight: number): number {
-  return skills.reduce((sum, skill) => {
+function weightedSkillCount(
+  skills: SkillEvidence[],
+  baseWeight: number,
+  activeResumeId?: string,
+  allResumes: ResumeProfile[] = [],
+  useUnionPenalty = false,
+): number {
+  const unionMultipliers = useUnionPenalty
+    ? applyUnionWeightPenalty(skills, activeResumeId, allResumes)
+    : [];
+
+  return skills.reduce((sum, skill, index) => {
     const priorityWeight =
       skill.priority === 'must' ? 1.25 : skill.priority === 'preferred' ? 0.75 : 1;
-    return sum + baseWeight * priorityWeight;
+    return sum + baseWeight * priorityWeight * (unionMultipliers[index] ?? 1);
   }, 0);
+}
+
+export function applyUnionWeightPenalty(
+  skills: SkillEvidence[],
+  activeResumeId?: string,
+  allResumes: ResumeProfile[] = [],
+): number[] {
+  if (!activeResumeId) return skills.map(() => 1);
+
+  const knownResumeIds = new Set(allResumes.map((resume) => resume.id));
+  return skills.map((skill) => {
+    if (!skill.sourceResumeIds || skill.sourceResumeIds.length === 0) return 1;
+
+    const sourceIds = skill.sourceResumeIds
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0 && (knownResumeIds.size === 0 || knownResumeIds.has(id)));
+
+    if (sourceIds.length === 0) return 1;
+    return sourceIds.includes(activeResumeId) ? 1 : 0.5;
+  });
 }
 
 function formatSkills(prefix: string, skills: SkillEvidence[]): string[] {

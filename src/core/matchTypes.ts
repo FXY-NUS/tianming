@@ -51,6 +51,7 @@ export interface SkillEvidence {
   skill: string;
   priority: SkillPriority;
   evidence?: string;
+  sourceResumeIds?: string[];
 }
 
 export interface ExtractedEvidence {
@@ -63,6 +64,13 @@ export interface ExtractedEvidence {
   growthScore?: number;
   personaReasons?: string[];
   personaScore?: number;
+}
+
+export interface RecommendedResume {
+  resumeId: string;
+  label: string;
+  reasoning: string;
+  edits_suggestion: string[];
 }
 
 export interface DimensionScore {

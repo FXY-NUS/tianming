@@ -609,14 +609,50 @@ describe('buildMatchScore — Phase 4.5 resumeBreakdown integration', () => {
     expect(score.resumeBreakdown).toBeUndefined();
   });
 
-  it('bumped SCORING_VERSION to v1.3 (Phase 4.5)', () => {
-    expect(SCORING_VERSION).toBe('phase4-scoring-v1.3');
+  it('bumped SCORING_VERSION and rubric for Phase 4.6 union weighting', () => {
+    expect(SCORING_VERSION).toBe('phase4-scoring-v2.0');
+    expect(DEFAULT_SCORING_RUBRIC.version).toBe('rubric-v1.1');
     const score = buildMatchScore({
       job: makeJob(),
       user: makeUser(),
       goal: 'audit',
       evidence,
     });
-    expect(score.scoringVersion).toBe('phase4-scoring-v1.3');
+    expect(score.scoringVersion).toBe('phase4-scoring-v2.0');
+    expect(score.rubricVersion).toBe('rubric-v1.1');
+  });
+
+  it('discounts skill evidence that only comes from non-active resumes', () => {
+    const user = makeUser({
+      resumes: [
+        makeResume('A', 'Active', { hard: ['Y'] }),
+        makeResume('B', 'Alt', { hard: ['X', 'Y'] }),
+        makeResume('C', 'Generalist', { hard: ['Z'] }),
+      ],
+      activeResumeId: 'A',
+    });
+
+    const score = buildMatchScore({
+      job: makeJob(),
+      user,
+      goal: 'audit',
+      evidence: {
+        matchedSkills: [
+          { skill: 'X', priority: 'unknown', sourceResumeIds: ['B'] },
+          { skill: 'Y', priority: 'unknown', sourceResumeIds: ['A', 'B'] },
+          { skill: 'Z', priority: 'unknown' },
+        ],
+        missingSkills: [],
+        transferableSkills: [],
+        cultureSignals: [],
+        growthReasons: [],
+      },
+    });
+
+    const skill = score.dimensions.find((dimension) => dimension.key === 'skill');
+    expect(skill?.score).toBe(83.3);
+    expect(skill?.warnings).toContain(
+      'Some matched skills only appear in non-active resumes and were discounted.',
+    );
   });
 });

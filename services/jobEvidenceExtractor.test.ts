@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Job, UserContext } from '../types';
-import { extractJobEvidence, safeParseEvidence } from './jobEvidenceExtractor';
+import type { Job, ResumeStructured, UserContext } from '../types';
+import { buildEvidencePrompt, extractJobEvidence, safeParseEvidence } from './jobEvidenceExtractor';
 
 const mockGenerateContent = vi.fn();
 
@@ -49,7 +49,12 @@ const job: Job = {
 
 const evidence = {
   matchedSkills: [
-    { skill: 'Python', priority: 'must', evidence: 'JD asks for Python' },
+    {
+      skill: 'Python',
+      priority: 'must',
+      evidence: 'JD asks for Python',
+      sourceResumeIds: ['resume-a'],
+    },
     { skill: 'SQL', priority: 'must' },
   ],
   missingSkills: [{ skill: 'AWS', priority: 'preferred' }],
@@ -58,6 +63,14 @@ const evidence = {
   cultureScore: 70,
   growthReasons: ['Good early-career analytics scope'],
   growthScore: 82,
+};
+
+const emptyStructured: ResumeStructured = {
+  basic: {},
+  education: [],
+  experience: [],
+  skills: { hard: [], soft: [], languages: [], tools: [] },
+  projects: [],
 };
 
 describe('jobEvidenceExtractor', () => {
@@ -75,6 +88,7 @@ describe('jobEvidenceExtractor', () => {
     expect(result.status).toBe('ok');
     if (result.status === 'ok') {
       expect(result.data.matchedSkills).toHaveLength(2);
+      expect(result.data.matchedSkills[0].sourceResumeIds).toEqual(['resume-a']);
       expect(result.data.growthScore).toBe(82);
     }
   });
@@ -83,6 +97,37 @@ describe('jobEvidenceExtractor', () => {
     const parsed = safeParseEvidence(`\`\`\`json\n${JSON.stringify(evidence)}\n\`\`\``);
 
     expect(parsed?.matchedSkills[0].skill).toBe('Python');
+  });
+
+  it('builds the evidence prompt from resume union context instead of active-only JSON', () => {
+    const prompt = buildEvidencePrompt(job, {
+      ...ctx,
+      resumes: [
+        {
+          id: 'resume-a',
+          label: 'Data CV',
+          structured: { ...emptyStructured, skills: { ...emptyStructured.skills, hard: ['SQL'] } },
+          piiPolicy: 'keep',
+          createdAt: '2026-05-21T00:00:00Z',
+        },
+        {
+          id: 'resume-b',
+          label: 'Game CV',
+          structured: {
+            ...emptyStructured,
+            skills: { ...emptyStructured.skills, hard: ['Unity'] },
+          },
+          piiPolicy: 'keep',
+          createdAt: '2026-05-21T00:00:00Z',
+        },
+      ],
+      activeResumeId: 'resume-a',
+    });
+
+    expect(prompt).toContain('【简历结构化数据（多简历 Union）】');
+    expect(prompt).toContain('SQL（来源: Data CV | resumeId: resume-a）');
+    expect(prompt).toContain('Unity（来源: Game CV | resumeId: resume-b）');
+    expect(prompt).not.toContain('Active resume:');
   });
 
   it('rejects malformed JSON responses as schema violations', async () => {

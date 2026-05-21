@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import type { Job, UserContext } from '../types';
 import type { ExtractedEvidence, SkillEvidence } from '../src/core/matchTypes';
+import { buildResumeUnionSection } from '../constants';
 
 const getApiKey = (): string => {
   const fromLocal = typeof window !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null;
@@ -23,6 +24,8 @@ Task:
 - Do not calculate the final match score.
 - Do not invent missing facts.
 - Use "unknown" priority when a skill's priority is unclear.
+- When resume evidence supports a skill, include sourceResumeIds with resume ids from the resume context.
+- If the source cannot be determined, omit sourceResumeIds instead of guessing.
 
 Return JSON only.
 `;
@@ -83,13 +86,7 @@ export function safeParseEvidence(text: string | undefined): ExtractedEvidence |
   }
 }
 
-function buildEvidencePrompt(job: Job, ctx: UserContext): string {
-  const activeResume = ctx.activeResumeId
-    ? ctx.resumes.find((resume) => resume.id === ctx.activeResumeId)
-    : undefined;
-  const resumeText = activeResume
-    ? JSON.stringify(activeResume.structured)
-    : 'No active resume selected.';
+export function buildEvidencePrompt(job: Job, ctx: UserContext): string {
   const activePersonas = ctx.personas.filter((persona) =>
     ctx.activePersonaIds.includes(persona.id),
   );
@@ -98,8 +95,8 @@ function buildEvidencePrompt(job: Job, ctx: UserContext): string {
 User profile:
 ${JSON.stringify(ctx.preferences)}
 
-Active resume:
-${resumeText}
+Resume context:
+${buildResumeUnionSection(ctx)}
 
 Active personas:
 ${activePersonas.length > 0 ? JSON.stringify(activePersonas) : 'No active personas selected.'}
@@ -120,6 +117,7 @@ export function defineEvidenceSchema() {
       skill: { type: Type.STRING },
       priority: { type: Type.STRING },
       evidence: { type: Type.STRING },
+      sourceResumeIds: { type: Type.ARRAY, items: { type: Type.STRING } },
     },
     required: ['skill', 'priority'],
   };
@@ -177,7 +175,8 @@ function isSkillEvidenceArray(value: unknown): value is SkillEvidence[] {
         (skill.priority === 'must' ||
           skill.priority === 'preferred' ||
           skill.priority === 'unknown') &&
-        (skill.evidence === undefined || typeof skill.evidence === 'string')
+        (skill.evidence === undefined || typeof skill.evidence === 'string') &&
+        (skill.sourceResumeIds === undefined || isStringArray(skill.sourceResumeIds))
       );
     })
   );

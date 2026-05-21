@@ -48,7 +48,7 @@ const job: Job = {
 
 const evidence = {
   matchedSkills: [
-    { skill: 'Python', priority: 'must' },
+    { skill: 'Python', priority: 'must', sourceResumeIds: ['resume-1'] },
     { skill: 'SQL', priority: 'must' },
   ],
   missingSkills: [{ skill: 'AWS', priority: 'preferred' }],
@@ -86,6 +86,12 @@ describe('matchEngine', () => {
         career_growth: 'Analytics path.',
         interview_tactics: 'Lead with SQL.',
         contract_red_flags: 'Check overtime.',
+        recommended_resume: {
+          resumeId: 'resume-1',
+          label: 'Default',
+          reasoning: 'Default covers Python and SQL.',
+          edits_suggestion: ['Add AWS to Skills.'],
+        },
         ...evidence,
       },
       job,
@@ -96,6 +102,8 @@ describe('matchEngine', () => {
     expect(result?.score).not.toBe(1);
     expect(result?.judgment).not.toBe('LLM says yes');
     expect(result?.evidenceStatus).toBe('ok');
+    expect(result?.recommended_resume?.resumeId).toBe('resume-1');
+    expect(result?.extractedEvidence?.matchedSkills[0].sourceResumeIds).toEqual(['resume-1']);
   });
 
   it('keeps scoring possible when evidence is missing', () => {
@@ -147,5 +155,29 @@ describe('matchEngine', () => {
     expect(
       result?.matchScore.dimensions.find((dimension) => dimension.key === 'culture')?.score,
     ).toBe(60);
+  });
+
+  it('rejects malformed recommended_resume when present', () => {
+    const result = scoreDeepAuditRecord(
+      {
+        summary: 'Narrative',
+        hexagram: '',
+        detailed_analysis: { pros: [], cons: [] },
+        cruel_truth_2026: 'Grounded outlook.',
+        career_growth: 'Analytics path.',
+        interview_tactics: 'Lead with SQL.',
+        contract_red_flags: 'Check overtime.',
+        recommended_resume: {
+          resumeId: 'resume-1',
+          label: 'Default',
+          reasoning: 'Default covers SQL.',
+          edits_suggestion: 'Add AWS to Skills.',
+        },
+      },
+      job,
+      user,
+    );
+
+    expect(result).toBeNull();
   });
 });
