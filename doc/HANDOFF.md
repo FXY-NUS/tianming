@@ -1,4 +1,4 @@
-# Tianming · 项目交接文档 v1.8
+# Tianming · 项目交接文档 v1.9
 
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
@@ -263,7 +263,7 @@ Web App / Extension
 |---|---|---|
 | **L0** | 什么都不做 | 起点 |
 | **L1** | JD 卡片高亮"立即投递"链接 | M1 含 |
-| **L2** | 结构化字段一键复制 + AI 生成 cover snippet（可编辑后复制） | **M1 必做**（Phase 5.5）|
+| **L2** | 结构化字段一键复制 + 用户预存 savedAnswers 模板 + 邮件模式拼装（**不调 LLM**；LLM 文案生成归 Phase 8）| **M1 必做**（Phase 5.5）|
 | **L3** | 扩展侧边栏 overlay（每字段点按钮复制 → 用户手动粘贴）| **M2 必做**（Phase 6.5）|
 | **L4** | 扩展自动 fill 表单字段（用户点提交）| ❌ **永久不做** |
 | **L5** | headless 自动提交 | ❌ **永久不做** |
@@ -455,23 +455,26 @@ interface LlmProvider {
 
 ---
 
-### Phase 4.6 — Pro 深审 Union prompt + 推荐简历 ⏳ 进行中
+### Phase 4.6 — Pro 深审 Union prompt + 推荐简历 ✅ 数据层 Done · UI 延后 M3
 **Track A 衍生**：把 Pro 深审 prompt 也升级为 union（修 Phase 4.5 的分歧），并让 Gemini 输出"用哪份简历投这个 JD" + "可以这样改"建议——对齐 North Star（让犹豫型用户 1 秒决定）。
 
 **核心决策**：见 §4 D12（4 个子决策不可回退）。
 
-**实现拆解**（Codex 在 `feat/phase-4-6-pro-audit-union` 分支执行）：
-- **2a** `constants.tsx`：新增 `buildResumeUnionSection`，替代 `buildActiveResumeSection` 在 `PRO_AUDIT_PROMPT` 里的位置。单份 / 无简历的退化分支保留。
-- **2b** `PRO_AUDIT_PROMPT` schema 扩展：加 `recommended_resume` 字段 + 重复"不出 overall / judgment"铁律。
-- **2c** `services/jobEvidenceExtractor.ts` Pass B：喂 union markdown，`SkillEvidence.sourceResumeIds?: string[]` 容错降级。
-- **2d** `types.ts` / `src/core/matchTypes.ts` 字段扩充 + `scoringVersion` bump 到 `phase4-scoring-v2.0` + `rubricVersion` bump 到 `rubric-v1.1`。
-- **2e** `src/core/scoringEngine.ts` `applyUnionWeightPenalty`：实施 D12 Q3 防通胀约束。
-- **2f** `App.tsx`：`handleDeepAudit` 后非阻塞 banner "建议用 XXX 简历" + [切换] + [看建议]（视觉等 Claude Design 设计稿）。
-- **2g** `ResumeMatchBreakdownCard.tsx`：顺手展示 `recommended_resume.reasoning`。
+**已落地**（PR #31 · commit `9074b6f` · merged to main `65ba3c2`）：
+- **2a** ✅ `constants.tsx` `buildResumeUnionSection`：skills+projects+education 取并集，experience 仍跟 active；单份 / 无简历退化分支保留；每条字段尾部带 `（来源: <label> | resumeId: <id>）`。
+- **2b** ✅ `PRO_AUDIT_PROMPT` schema 扩展 `recommended_resume`；约束段强制 reasoning 必须显式提到具体 skill/project + 重复 "不输出 overall / judgment" 铁律。
+- **2c** ✅ Pass B (`jobEvidenceExtractor.ts`) 喂 union markdown，schema 加 `sourceResumeIds`，validator 容错降级。
+- **2d** ✅ `types.ts` / `matchTypes.ts` 加 `RecommendedResume` 类型 + `SkillEvidence.sourceResumeIds?: string[]`；`SCORING_VERSION` → `phase4-scoring-v2.0`，`rubric` → `rubric-v1.1`。
+- **2e** ✅ `scoringEngine.ts` `applyUnionWeightPenalty`：active 简历独占的 skill ×1，非 active 独占的 skill ×0.5；分子用 penalty，分母不打折（防分母通胀）；命中 penalty 时 warning 提示。
 
-**工期**：1-2 天（Codex 代码 + Claude Design 1 天视觉 + Super Grok prompt review）。
+**延后到 M3（跟 Claude Design polish 合并做）**：
+- **2f** ⏸ `App.tsx` 完整非阻塞 banner + edits_suggestion 折叠区 + 切换按钮（视觉走 Claude Design 设计稿）。
+- **2g** ⏸ `ResumeMatchBreakdownCard.tsx` 展示 `recommended_resume.reasoning` 区块。
 
-**验收**：见 `doc/briefs/claude-design-phase-4-6-recommended-resume.md` 和 `doc/briefs/grok-day-1-prompt-review-ml-rfc.md` 任务包末尾的清单。**反通胀关键测试**：构造一份"什么都会"的简历 + 一份单一方向简历，对同一 JD 跑 audit，看分数有没有 union 通胀。
+**Phase 5.5 内顺手做的占位**（不计入 4.6 完工）：
+- 深审 modal 顶部一行**纯文字 banner**："💡 推荐用 [label] 投这个 JD · [reasoning 截 80 字]…  [切换为 active]"——零样式，故意丑，M3 由 Design 翻 UI。详见 `doc/briefs/codex-phase-5-5-apply-assistant-l2.md` §5f。
+
+**反通胀关键测试（M1 收尾前补）**：构造一份"什么都会"的简历 + 一份单一方向简历，对同一 JD 跑 audit，看分数有没有 union 通胀；当前已有 `scoringEngine.test.ts` 覆盖单测层 `applyUnionWeightPenalty`，端到端 smoke 待 Codex 本地补。
 
 ---
 
@@ -495,25 +498,37 @@ interface LlmProvider {
 
 ---
 
-### Phase 5.5（重新定义）— Apply Assistant L2 投递助手 · 结构化字段一键复制
+### Phase 5.5（v1.9 重定义）— Apply Assistant L2 投递助手 · 结构化字段一键复制
 **Track D，M1 必含**。这是为犹豫型 / ADHD 用户**过最后一公里**的关键功能。详细分级见 §4 D11。
+**决策依据**：本 Phase 不调任何 LLM——格式不齐由 Phase 4.6 `recommended_resume.edits_suggestion` 兜底，"现想 Why interested" freeze 由用户预存 `savedAnswers` 模板兜底，"AI 生成 cover letter / 简历针对性优化" 归 Phase 8 Track D 下半段（与学校友校重复价值的事不做）。
 
-**目标**：Pro 深审完成后多出一个"📋 投递助手"入口 → 弹出 modal，结构化展示：
-- 基本信息（姓名 / 邮箱 / 电话 / 地址）每项独立 一键复制
-- 教育经历（每段每个字段独立）
-- 工作经历（每段每个 bullet 独立）
-- **AI 生成 "Why this company"**（基于 JD + 简历 → textarea **可编辑** → 复制）
-- **AI 生成 "Why a good fit"**（基于 JD pros/cons → 同上 → 可编辑 → 复制）
-- 期望薪资 / 可入职时间等动态字段一键复制
-- 顶部一个大按钮 "↗️ 跳转到投递页"（用 JD.url 新窗口打开）
+**目标**：Pro 深审 modal 底部新增"📋 投递助手 · 30 秒投递准备"折叠区（默认收起），展开后两个 tab：
+- **"字段复制"**：遍历 `UserPreferences.applyProfile`（姓名 / 邮箱 / 电话 / 地址 / LinkedIn / GitHub / portfolio / 工签状态 / 工作年限 / relocate / 可入职日期 / 邮件签名）每行 `[标签 + 值 + 📋 复制]`。
+- **"邮件模式"**：拼装 `Dear Hiring Team → 选用 savedAnswer 作正文 → 签名 from applyProfile.signature`，textarea 展示，整块一键复制——给"邮箱投递"场景用。
 
-**关键产品语**：**不替用户提交**——用户 100% 手动点"粘贴"按钮，行为本质是"复制粘贴"，跟 1Password 一个性质。**永远不做 L4 真正 autofill / L5 auto-submit**（见 §4 D11）。
+**新数据结构（types.ts 加在 UserPreferences）**：
+```ts
+applyProfile?: {
+  fullName, email, phone, location, linkedIn, github, portfolio,
+  workAuthStatus, yearsExperience, willingToRelocate, earliestStartDate,
+  signature,
+  savedAnswers?: Array<{ id, label, content, updatedAt }>;  // 上限 10 条
+}
+```
+全字段 optional，老 context 加载不崩。首次设置可从 `activeResume.structured.basic` 一次性预填。
 
-**Gemini 调用**：+1（生成 cover snippets 那一次）。叙述部分允许 temperature 中等，给 narrative 留余地。
+**关键产品语**：**不替用户提交**——用户 100% 手动点"复制"按钮，行为本质是"复制粘贴"，跟 1Password 一个性质。**永远不做 L4 真正 autofill / L5 auto-submit**（见 §4 D11）。
 
-**工期**：1.5-2 天。
+**Gemini 调用**：+0。本 Phase 全部纯前端字符串拼装 + Dexie 持久化。
+
+**顺手做**：深审 modal 顶部加 **Phase 4.6 `recommended_resume` 最简版纯文字 banner**（"💡 推荐用 [label] · [reasoning 80 字]…  [切换为 active]"），零样式 ≤30 行 JSX。M3 由 Claude Design 翻 UI。
+
+**工期**：1-1.5 天。
+
+**Brief**：`doc/briefs/codex-phase-5-5-apply-assistant-l2.md` v1.0。
 
 **~~原 Phase 5.5 截图导入 JD~~**：已搁置（UX 不如复制粘贴）。
+**~~v1.8 版方案"AI 生成 cover snippet"~~**：v1.9 已剔除，移交 Phase 8。
 
 ---
 
@@ -894,7 +909,7 @@ main (始终可发布)
 
 ## 11. 接力指令
 
-**当前位置**：Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done · main 上含 scoring engine + resume union 评分 + ResumeMatchBreakdownCard UI（PR #27）+ Dexie 存储（PR #26）· **Phase 4.6 ⏳ 进行中**（Codex 在 `feat/phase-4-6-pro-audit-union` 实施 Pro 深审 union prompt + recommended_resume；Claude Design / Super Grok 限时会员窗口任务包见 `doc/briefs/`）· **M1 剩余**：Phase 4.6 合并 + Phase 5.5 Apply Assistant L2 + 简历多版本切换 UX。
+**当前位置**：Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done · **Phase 4.6 数据层 ✅ Done**（PR #31 merged `65ba3c2`：Pro 深审 union prompt + `recommended_resume` schema + ×0.5 防通胀；UI 层 2f/2g 延后到 M3 跟 Claude Design polish 一起做，Phase 5.5 内塞最简纯文字 banner 占位）· **Phase 5.5 ⏳ 启动**（Codex 待开 `feat/phase-5-5-apply-assistant-l2` · brief 见 `doc/briefs/codex-phase-5-5-apply-assistant-l2.md` v1.0：ApplyProfile + savedAnswers + 邮件模式 + 4.6 banner 占位 · 全程零 LLM）· **M1 剩余**：Phase 5.5 落地 + 简历多版本切换 UX 整理 → 即可宣告 M1 Done 转 M2 浏览器扩展。
 
 **新 session 第一步**：
 1. 读完本文档全文，**特别是 §1.5 North Star + §4 D1-D12 + §5.0 Tracks/Milestones + §10.2 五方分工 + §10.4 任务分发 brief 模板**。
@@ -931,6 +946,8 @@ main (始终可发布)
 ---
 
 *文档版本 v1.8 · 2026-05-20 · D12 Pro Audit Union Strategy + Phase 4.5 状态升 Done + Phase 4.6 章节 + Phase 8 拆分（Cover Letter 归 Track D · Phase 8.x ML 反馈闭环归 Track F）+ §10.2 三方→五方分工矩阵（加 Super Grok）+ §10.4 任务分发 brief 模板（限时会员窗口起紧急触发）*
+
+*文档版本 v1.9 · 2026-05-27 · Phase 4.6 数据层 ✅ Done（PR #31 merged）· UI 层 2f/2g 延后到 M3 跟 Claude Design polish 一起做 · Phase 5.5 v1.9 重定义：剔除 "AI 生成 cover snippet"（移交 Phase 8），改为 ApplyProfile + savedAnswers 用户预存模板 + 邮件模式拼装，全程零 LLM · §4 D11 L2 描述同步更新 · 5.5 内顺手塞 4.6 `recommended_resume` 最简纯文字 banner 占位 · brief: `doc/briefs/codex-phase-5-5-apply-assistant-l2.md` v1.0*
 
 *文档版本 v1.7 · 2026-05-20 · Phase 2.6 / 2.8 状态更新为 Done + Phase 2.8 落地详情 + phase-2-8-notes.md 加入必读列表*
 

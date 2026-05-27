@@ -38,7 +38,7 @@
 - 本地 `npm run dev` 可正常调用 Gemini API
 - Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done（main 状态）：工具链 + UserContext + Persona 插件系统 + MBTI/RIASEC polish + 简历上传解析 + Match/Scoring Engine + 简历 Union 技能覆盖 + `ResumeMatchBreakdownCard` UI 接入（PR #27）+ Dexie 存储完整迁移（PR #26）。详见 `doc/HANDOFF.md` §2、`doc/phase-2-8-notes.md`、`doc/scoring-rubric.md`。
 - `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8.x（**ML 学权重，归 Track F**）浏览器端轻量学习铺垫。
-- **当前焦点**：**Phase 4.6 进行中**（Pro 深审 union prompt + `recommended_resume` 字段；Codex 在 `feat/phase-4-6-pro-audit-union` 实施 · 决策见 HANDOFF §4 D12 · Claude Design 1 天紧急做视觉 + Super Grok 3 天做 prompt review + Phase 8.x ML RFC，brief 见 `doc/briefs/`）。CC 下一步候选（Phase 4.6 合 main 后）：Phase 5.5 Apply Assistant L2 / Phase 2.7 六爻插件（设计待定）/ Phase 8 Cover Letter 文案。**North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；五方分工见 §10.2；brief 模板见 §10.4。**
+- **当前焦点**：**Phase 4.6 数据层 ✅ Done**（PR #31 merged `65ba3c2`：Pro 深审 union prompt + `recommended_resume` schema + ×0.5 防通胀；UI 层 2f/2g 延后到 M3 跟 Claude Design polish 一起做）→ **Phase 5.5 Apply Assistant L2 ⏳ 启动**（Codex 待开 `feat/phase-5-5-apply-assistant-l2` · brief: `doc/briefs/codex-phase-5-5-apply-assistant-l2.md` v1.0 · ApplyProfile + savedAnswers + 邮件模式 + 4.6 banner 占位 · **全程零 LLM**——LLM 文案生成归 Phase 8）。**North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；五方分工见 §10.2；brief 模板见 §10.4。**
 
 ## 三、Tech Stack
 
@@ -63,9 +63,9 @@
 | 3 | 简历上传 + Gemini 多模态结构化解析 | ✅ Done |
 | 4 | Match Engine + Scoring Engine（可解释评分 + 统一上下文装配）| ✅ Done |
 | 4.5 | 简历 Union 技能覆盖对比（scoring + UI）+ `ResumeMatchBreakdownCard` 接入 | ✅ Done · PR #27 |
-| 4.6 | Pro 深审 union prompt + `recommended_resume`（推荐简历 + edits_suggestion） | ⏳ 进行中（Codex 代码 + Design 视觉 + Grok prompt review）|
+| 4.6 | Pro 深审 union prompt + `recommended_resume` schema · UI 层 2f/2g 延后到 M3 | ✅ 数据层 Done · PR #31 |
 | 5 | 存储升级 localStorage → Dexie（同时根治 Phase 4 A1 数据丢失）| ✅ Done · PR #26 |
-| 5.5 | Apply Assistant L2（投递助手 · 结构化字段一键复制）| ⏸ 排队（4.6 合后）|
+| 5.5 | Apply Assistant L2（ApplyProfile + savedAnswers + 邮件模式 · 零 LLM）| ⏳ 启动（Codex `feat/phase-5-5-apply-assistant-l2`）|
 | 6 | 浏览器扩展（MV3）+ 后端代理雏形（API Key 移出前端）| |
 | 7 | UI 整体调整 + 简历多版本管理 | |
 | 8 | Cover Letter 生成 / 简历针对性优化建议（**Track D 文案反向赋能**） | |
