@@ -44,7 +44,7 @@ export function buildBatchScreenContents(jobs: Job[]): string {
 export function buildDeepAuditContents(job: Job): string {
   return `启动天命深度审计。公司：${job.company}。职位：${job.title}。地点：${job.locationText || 'unknown'}。薪资：${job.salaryText || job.salary_text || 'unknown'}。工作模式：${job.workMode || 'unknown'}。JD原文：${job.content}
 
-请同时抽取 matchedSkills、missingSkills、transferableSkills、cultureSignals、growthReasons 等评分证据。
+请同时抽取 matchedSkills、missingSkills、transferableSkills、cultureSignals、growthReasons 等评分证据；若 skill 证据来自简历，请在该 skill 对象上输出 sourceResumeIds。
 最终 score 和 judgment 将由代码评分引擎生成，不要自行输出最终分数或最终推荐等级。`;
 }
 
@@ -83,6 +83,16 @@ function defineDeepAuditSchema() {
       career_growth: { type: Type.STRING },
       interview_tactics: { type: Type.STRING },
       contract_red_flags: { type: Type.STRING },
+      recommended_resume: {
+        type: Type.OBJECT,
+        properties: {
+          resumeId: { type: Type.STRING },
+          label: { type: Type.STRING },
+          reasoning: { type: Type.STRING },
+          edits_suggestion: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ['resumeId', 'label', 'reasoning', 'edits_suggestion'],
+      },
       ...evidenceSchema.properties,
     },
     required: [
@@ -93,6 +103,7 @@ function defineDeepAuditSchema() {
       'career_growth',
       'interview_tactics',
       'contract_red_flags',
+      'recommended_resume',
       ...evidenceSchema.required,
     ],
   };

@@ -1,4 +1,9 @@
-import type { ExtractedEvidence, MatchFeedbackRecord, MatchScore } from './src/core/matchTypes';
+import type {
+  ExtractedEvidence,
+  MatchFeedbackRecord,
+  MatchScore,
+  RecommendedResume,
+} from './src/core/matchTypes';
 
 export interface Job {
   id: string;
@@ -36,6 +41,7 @@ export interface Job {
     career_growth: string;
     interview_tactics: string;
     contract_red_flags: string;
+    recommended_resume?: RecommendedResume;
   };
 
   chatHistory: { role: 'user' | 'model'; text: string; time: string }[];

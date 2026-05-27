@@ -1,5 +1,11 @@
 import type { Job, UserContext } from '../../types';
-import type { ExtractedEvidence, MatchLabel, MatchScore, SkillEvidence } from './matchTypes';
+import type {
+  ExtractedEvidence,
+  MatchLabel,
+  MatchScore,
+  RecommendedResume,
+  SkillEvidence,
+} from './matchTypes';
 import { buildMatchScore } from './scoringEngine';
 
 export interface BatchScreenMatchResult {
@@ -21,6 +27,7 @@ export interface DeepAuditNarrative {
   career_growth: string;
   interview_tactics: string;
   contract_red_flags: string;
+  recommended_resume?: RecommendedResume;
 }
 
 export interface DeepAuditMatchResult extends DeepAuditNarrative {
@@ -151,6 +158,11 @@ function normalizeSkillEvidenceArray(value: unknown): SkillEvidence[] {
       skillEvidence.evidence = record.evidence.trim();
     }
 
+    const sourceResumeIds = normalizeStringArray(record.sourceResumeIds);
+    if (sourceResumeIds.length > 0) {
+      skillEvidence.sourceResumeIds = sourceResumeIds;
+    }
+
     return [skillEvidence];
   });
 }
@@ -174,7 +186,8 @@ export function isDeepAuditNarrative(value: unknown): value is DeepAuditNarrativ
     typeof record.cruel_truth_2026 === 'string' &&
     typeof record.career_growth === 'string' &&
     typeof record.interview_tactics === 'string' &&
-    typeof record.contract_red_flags === 'string',
+    typeof record.contract_red_flags === 'string' &&
+    (record.recommended_resume === undefined || isRecommendedResume(record.recommended_resume)),
   );
 }
 
@@ -259,9 +272,21 @@ function isSkillEvidenceArray(value: unknown): value is SkillEvidence[] {
         (skill.priority === 'must' ||
           skill.priority === 'preferred' ||
           skill.priority === 'unknown') &&
-        (skill.evidence === undefined || typeof skill.evidence === 'string')
+        (skill.evidence === undefined || typeof skill.evidence === 'string') &&
+        (skill.sourceResumeIds === undefined || isStringArray(skill.sourceResumeIds))
       );
     })
+  );
+}
+
+function isRecommendedResume(value: unknown): value is RecommendedResume {
+  const record = asRecord(value);
+  return Boolean(
+    record &&
+    typeof record.resumeId === 'string' &&
+    typeof record.label === 'string' &&
+    typeof record.reasoning === 'string' &&
+    isStringArray(record.edits_suggestion),
   );
 }
 
