@@ -37,18 +37,18 @@
 ```
 Layer 1 · Streaming Flow
   N 个 JD → 屏中央 1 张大卡 + 4 张准备好的下一批
-  算法过滤是隐形的。永远不暴露漏斗 / 桶 / 固定 N picks。
+  算法过滤是隐形的。
   设计哲学：Spotify Discover Weekly / Hinge，不是 LinkedIn 列表。
 
 Layer 2 · 决策审计
   Gemini 抽证据，代码算分（Pass A/B/C 三层 rubric，可解释）。
-  叙事层叠加：卦象 + 残酷真相 + 12-24 月可执行 action plan。
-  Persona 系统（MBTI / Holland / Big5 / 紫微斗数）作为画像图层。
+  叙事层叠加：pros & cons + 12-24 月可执行 action plan。
+  Persona 系统（MBTI / Holland / Big5 etc.）作为画像图层。
 
 Layer 3 · 投递助手（Apply Assistant）
   L2 结构化字段一键复制 + AI cover snippet 可编辑后粘贴
-  L3 浏览器扩展侧边栏 paste-helper（M2 引入）
-  L4/L5 真正 autofill / auto-submit —— 永久不做。
+  L3 浏览器扩展侧边栏 paste-helper
+  。
 ```
 
 ---
@@ -56,7 +56,7 @@ Layer 3 · 投递助手（Apply Assistant）
 ## 我们永远不做的事
 
 - **不做自动投递 / autofill**。让用户按按钮，不是替他按。  
-  "替犹豫者按按钮 = 让他更被动"。这违背 North Star。
+  "替犹豫者按按钮 = 让他更被动"。
 - **不做漏斗仪表盘 / 决策桶**。用户不是 HR，不需要 triage UI。
 - **不暴露任何过滤数字**。"我们扔了 83 个" 会让用户回头点 Skip 桶撤销过滤。
 - **简历原文件不上云**。本地解析、本地存储。PII 红线。
@@ -68,11 +68,10 @@ Layer 3 · 投递助手（Apply Assistant）
 ## 当前进度
 
 - ✅ JD 批量初筛 + 单 JD 深度审计
-- ✅ Persona 插件系统（4 个：MBTI / Holland / Big5 / 紫微）
+- ✅ Persona 插件系统（4 个：MBTI / Holland / Big5 etc）
 - ✅ 简历多模态解析（PDF / DOCX / 图片）+ 多版本管理
-- ✅ 紫微 plugin：文墨天机命盘 paste 解析（零 LLM）
 - ✅ Pass A/B/C 评分引擎 + 可解释维度分
-- ⏳ Phase 5 Dexie 存储升级（解决跨 tab 持久化）
+- ✅ Phase 5 Dexie 存储升级（解决跨 tab 持久化）
 - ⏳ Phase 5.5 Apply Assistant L2
 - ⏳ Phase 6 浏览器扩展（卡片粗筛 + 详情捕获）
 
@@ -114,7 +113,6 @@ API key 从 [Google AI Studio](https://aistudio.google.com) 拿。
 - 简历原文件**永不上云**
 - API key **仅本地**使用
 - 所有 AI 分析在你自己的浏览器里跑（BYOK）
-- 紫微 plugin 的命盘解析是**纯客户端 regex，零 LLM**
 
 ---
 
