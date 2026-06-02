@@ -112,6 +112,10 @@ Layer 3 · 行动层（Apply Assistant）  ⭐ 关键，不能漏
 - ✅ **Phase 2.6**：紫微 polish（双主星 + mainStarStrengths + 文墨天机 parser + opposingPalaces + 12-24mo action plan）— PR #18 merged
 - ✅ **Phase 2.8**：MBTI / RIASEC polish（MBTI 4 维 dimension expansion + Pittenger 1993 / RIASEC 6 维原始分 + 百分比归一化 + 3:2:1 fallback）— 详见 `doc/phase-2-8-notes.md`
 - ✅ **Phase 3**：简历上传 + Gemini 多模态结构化解析 + 多版本管理 + Prompt 命理图层条件化（详见 `doc/phase-3-notes.md`）
+- ✅ **Phase 4**：Match Engine + Scoring Engine（Pass A/B/C 三层 · `src/core/scoringEngine.ts` + `matchEngine.ts`，详见 `doc/scoring-rubric.md` / `phase-4-notes.md`）
+- ✅ **Phase 4.5**：简历 Union 技能覆盖评分 + `ResumeMatchBreakdownCard` UI 接入 — PR #27 merged
+- ✅ **Phase 5**：存储升级 localStorage → Dexie/IndexedDB（`src/storage/` db + migration + repository）— PR #26 merged
+- 🟡 **Phase 4.6**：数据/评分/prompt 层（union prompt + `recommended_resume` + `applyUnionWeightPenalty` 防通胀 + `scoringVersion` v2.0 / `rubricVersion` v1.1）— PR #31 merged；**UI 推荐 banner（2f–2g）未做**（详见 §5 Phase 4.6 + `doc/phase-4-6-notes.md`）
 
 ### 当前 Repo 结构
 
@@ -455,21 +459,21 @@ interface LlmProvider {
 
 ---
 
-### Phase 4.6 — Pro 深审 Union prompt + 推荐简历 ⏳ 进行中
+### Phase 4.6 — Pro 深审 Union prompt + 推荐简历 🟡 数据/评分/prompt 层 ✅ Done（PR #31）· UI 层 ⏸ 未接
 **Track A 衍生**：把 Pro 深审 prompt 也升级为 union（修 Phase 4.5 的分歧），并让 Gemini 输出"用哪份简历投这个 JD" + "可以这样改"建议——对齐 North Star（让犹豫型用户 1 秒决定）。
 
 **核心决策**：见 §4 D12（4 个子决策不可回退）。
 
-**实现拆解**（Codex 在 `feat/phase-4-6-pro-audit-union` 分支执行）：
-- **2a** `constants.tsx`：新增 `buildResumeUnionSection`，替代 `buildActiveResumeSection` 在 `PRO_AUDIT_PROMPT` 里的位置。单份 / 无简历的退化分支保留。
-- **2b** `PRO_AUDIT_PROMPT` schema 扩展：加 `recommended_resume` 字段 + 重复"不出 overall / judgment"铁律。
-- **2c** `services/jobEvidenceExtractor.ts` Pass B：喂 union markdown，`SkillEvidence.sourceResumeIds?: string[]` 容错降级。
-- **2d** `types.ts` / `src/core/matchTypes.ts` 字段扩充 + `scoringVersion` bump 到 `phase4-scoring-v2.0` + `rubricVersion` bump 到 `rubric-v1.1`。
-- **2e** `src/core/scoringEngine.ts` `applyUnionWeightPenalty`：实施 D12 Q3 防通胀约束。
-- **2f** `App.tsx`：`handleDeepAudit` 后非阻塞 banner "建议用 XXX 简历" + [切换] + [看建议]（视觉等 Claude Design 设计稿）。
-- **2g** `ResumeMatchBreakdownCard.tsx`：顺手展示 `recommended_resume.reasoning`。
+**实现拆解**（PR #31 已合 main · 2a–2e 完成；2f–2g 待 UI）：
+- **2a** ✅ `constants.tsx`：新增 `buildResumeUnionSection`，替代 `buildActiveResumeSection` 在 `PRO_AUDIT_PROMPT` 里的位置。单份 / 无简历的退化分支保留。
+- **2b** ✅ `PRO_AUDIT_PROMPT` schema 扩展：加 `recommended_resume` 字段 + 重复"不出 overall / judgment"铁律。
+- **2c** ✅ `services/jobEvidenceExtractor.ts` Pass B：喂 union markdown，`SkillEvidence.sourceResumeIds?: string[]` 容错降级。
+- **2d** ✅ `types.ts` / `src/core/matchTypes.ts` 字段扩充 + `scoringVersion` bump 到 `phase4-scoring-v2.0` + `rubricVersion` bump 到 `rubric-v1.1`。
+- **2e** ✅ `src/core/scoringEngine.ts` `applyUnionWeightPenalty`：实施 D12 Q3 防通胀约束。
+- **2f** ⏸ `App.tsx`：`handleDeepAudit` 后非阻塞 banner "建议用 XXX 简历" + [切换] + [看建议]（视觉等 Claude Design 设计稿）。**尚未做**——`recommended_resume` 已被 `matchEngine` 解析进结果但 `App.tsx` 未渲染。
+- **2g** ⏸ `ResumeMatchBreakdownCard.tsx`：顺手展示 `recommended_resume.reasoning`。**尚未做**。
 
-**工期**：1-2 天（Codex 代码 + Claude Design 1 天视觉 + Super Grok prompt review）。
+**剩余工期**：UI 收尾 0.5-1 天（等 Claude Design 设计稿；或并入 Phase 7 UI 整体焕新一起做）。代码层（Codex `feat/phase-4-6-pro-audit-union` → PR #31）已合。
 
 **验收**：见 `doc/briefs/claude-design-phase-4-6-recommended-resume.md` 和 `doc/briefs/grok-day-1-prompt-review-ml-rfc.md` 任务包末尾的清单。**反通胀关键测试**：构造一份"什么都会"的简历 + 一份单一方向简历，对同一 JD 跑 audit，看分数有没有 union 通胀。
 
@@ -894,7 +898,7 @@ main (始终可发布)
 
 ## 11. 接力指令
 
-**当前位置**：Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done · main 上含 scoring engine + resume union 评分 + ResumeMatchBreakdownCard UI（PR #27）+ Dexie 存储（PR #26）· **Phase 4.6 ⏳ 进行中**（Codex 在 `feat/phase-4-6-pro-audit-union` 实施 Pro 深审 union prompt + recommended_resume；Claude Design / Super Grok 限时会员窗口任务包见 `doc/briefs/`）· **M1 剩余**：Phase 4.6 合并 + Phase 5.5 Apply Assistant L2 + 简历多版本切换 UX。
+**当前位置**：Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done · main 上含 scoring engine + resume union 评分 + ResumeMatchBreakdownCard UI（PR #27）+ Dexie 存储（PR #26）· **Phase 4.6 🟡 数据/评分/prompt 层 ✅ Done（PR #31，子任务 2a–2e：union prompt + `recommended_resume` + `applyUnionWeightPenalty` 防通胀 + `scoringVersion` v2.0 / `rubricVersion` v1.1）；UI 层 2f–2g ⏸ 未接**（`recommended_resume` 已被算出但 `App.tsx` 未渲染推荐 banner，等 Claude Design 设计稿或并入 Phase 7）· **M1 剩余**：Phase 4.6 UI 收尾（2f–2g）+ Phase 5.5 Apply Assistant L2 + 简历多版本切换 UX。
 
 **新 session 第一步**：
 1. 读完本文档全文，**特别是 §1.5 North Star + §4 D1-D12 + §5.0 Tracks/Milestones + §10.2 五方分工 + §10.4 任务分发 brief 模板**。
