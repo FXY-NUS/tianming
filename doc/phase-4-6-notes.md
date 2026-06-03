@@ -1,6 +1,6 @@
 # Phase 4.6 Notes · Pro Audit Resume Union + Recommended Resume
 
-> 本文档记录 Phase 4.6 的落地决策、实现细节、smoke 测试记录。当前为**骨架版**（Codex 代码尚未合 main），落地细节会随 PR 推进补充。
+> 本文档记录 Phase 4.6 的落地决策、实现细节、smoke 测试记录。**当前状态：数据/评分/prompt 层（2a–2e）已合 main（PR #31）；UI 层（2f–2g 推荐简历 banner）尚未做**——`recommended_resume` 已被 `matchEngine` 解析进结果，但 `App.tsx` / `ResumeMatchBreakdownCard.tsx` 未渲染。smoke 测试记录待 Codex 本地跑完补。
 
 > **配套**：HANDOFF v1.8 §4 D12 · §5 Phase 4.6 · `doc/scoring-rubric.md` §2 Pass B · `doc/briefs/codex-phase-4-6-pro-audit-union.md`
 
@@ -85,13 +85,13 @@ recommended_resume: {
 
 | 子任务 | 文件 | 状态 |
 |---|---|---|
-| 2a `buildResumeUnionSection` | `constants.tsx` | ⏳ Codex 进行中 |
-| 2b `PRO_AUDIT_PROMPT` schema 扩展 | `constants.tsx` | ⏳ 待 Super Grok review |
-| 2c Pass B 喂 union | `services/jobEvidenceExtractor.ts` | ⏳ |
-| 2d types + scoringVersion bump | `types.ts` / `src/core/matchTypes.ts` | ⏳ |
-| 2e `applyUnionWeightPenalty` Q3 | `src/core/scoringEngine.ts` | ⏳ |
-| 2f 推荐简历 banner | `App.tsx` | ⏸ 等 Claude Design 设计稿 |
-| 2g BreakdownCard 对齐 | `src/components/ResumeMatchBreakdownCard.tsx` | ⏸ 跟 2f 一起 |
+| 2a `buildResumeUnionSection` | `constants.tsx` | ✅ Done · PR #31 |
+| 2b `PRO_AUDIT_PROMPT` schema 扩展 | `constants.tsx` | ✅ Done · PR #31 |
+| 2c Pass B 喂 union | `services/jobEvidenceExtractor.ts` | ✅ Done · PR #31 |
+| 2d types + scoringVersion bump | `types.ts` / `src/core/matchTypes.ts` | ✅ Done · PR #31（v2.0 / rubric-v1.1）|
+| 2e `applyUnionWeightPenalty` Q3 | `src/core/scoringEngine.ts` | ✅ Done · PR #31 |
+| 2f 推荐简历 banner | `App.tsx` | ⏸ 未做（等 Claude Design 设计稿；`recommended_resume` 已算出但未渲染）|
+| 2g BreakdownCard 对齐 | `src/components/ResumeMatchBreakdownCard.tsx` | ⏸ 未做（跟 2f 一起）|
 
 ---
 
@@ -150,10 +150,11 @@ recommended_resume: {
 
 ---
 
-## 5. PR 信息（待补）
+## 5. PR 信息
 
-- 代码 PR：⏳ 待 Codex 发
-- 文档 PR：✅ HANDOFF v1.8（PR #28 已合）
+- 代码 PR（2a–2e 数据/评分/prompt 层）：✅ **PR #31 已合 main**（`feat: add pro audit resume union scoring`）
+- 文档 PR：✅ HANDOFF v1.8（PR #28 已合）+ 本次进度同步
+- UI PR（2f–2g 推荐简历 banner）：⏳ 未发，等 Claude Design 设计稿
 - 设计稿 PR：⏳ Claude Design 出稿后用户上传
 
 ---
