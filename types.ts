@@ -58,6 +58,30 @@ export interface UserPreferences {
   workMode?: 'remote' | 'onsite' | 'hybrid' | 'any';
   preferredLocations: string[];
   avoidKeywords: string[];
+  applyProfile?: ApplyProfile;
+}
+
+export interface ApplyProfile {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedIn?: string;
+  github?: string;
+  portfolio?: string;
+  workAuthStatus?: string;
+  yearsExperience?: string;
+  willingToRelocate?: 'yes' | 'no' | 'depends';
+  earliestStartDate?: string;
+  signature?: string;
+  savedAnswers?: SavedAnswer[];
+}
+
+export interface SavedAnswer {
+  id: string;
+  label: string;
+  content: string;
+  updatedAt: string;
 }
 
 export interface ResumeStructured {
