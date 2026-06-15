@@ -1,4 +1,11 @@
-import { UserContext, LegacyProfile, ResumeStructured, LegacyV1ResumeProfile } from '../types';
+import {
+  ApplyProfile,
+  SavedAnswer,
+  UserContext,
+  LegacyProfile,
+  ResumeStructured,
+  LegacyV1ResumeProfile,
+} from '../types';
 
 export const USER_CONTEXT_V1_KEY = 'tianming_user_context_v1';
 export const USER_CONTEXT_KEY = 'tianming_user_context_v2';
@@ -89,6 +96,7 @@ function normalizePreferences(p: unknown): UserContext['preferences'] {
     obj.workMode === 'any'
       ? obj.workMode
       : undefined;
+  const applyProfile = normalizeApplyProfile(obj.applyProfile);
   return {
     displayName: str(obj.displayName),
     backgroundSummary: str(obj.backgroundSummary),
@@ -98,7 +106,55 @@ function normalizePreferences(p: unknown): UserContext['preferences'] {
     workMode,
     preferredLocations: stringArr(obj.preferredLocations),
     avoidKeywords: stringArr(obj.avoidKeywords),
+    applyProfile,
   };
+}
+
+function normalizeApplyProfile(value: unknown): ApplyProfile | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const obj = value as Record<string, unknown>;
+  const str = (v: unknown): string | undefined =>
+    typeof v === 'string' && v.trim() ? v : undefined;
+  const willingToRelocate =
+    obj.willingToRelocate === 'yes' ||
+    obj.willingToRelocate === 'no' ||
+    obj.willingToRelocate === 'depends'
+      ? obj.willingToRelocate
+      : undefined;
+  const savedAnswers = Array.isArray(obj.savedAnswers)
+    ? obj.savedAnswers.flatMap((item): SavedAnswer[] => {
+        if (!item || typeof item !== 'object') return [];
+        const answer = item as Record<string, unknown>;
+        if (typeof answer.id !== 'string' || typeof answer.label !== 'string') return [];
+        if (typeof answer.content !== 'string' || typeof answer.updatedAt !== 'string') return [];
+        return [
+          {
+            id: answer.id,
+            label: answer.label,
+            content: answer.content,
+            updatedAt: answer.updatedAt,
+          },
+        ];
+      })
+    : undefined;
+
+  const profile: ApplyProfile = {
+    fullName: str(obj.fullName),
+    email: str(obj.email),
+    phone: str(obj.phone),
+    location: str(obj.location),
+    linkedIn: str(obj.linkedIn),
+    github: str(obj.github),
+    portfolio: str(obj.portfolio),
+    workAuthStatus: str(obj.workAuthStatus),
+    yearsExperience: str(obj.yearsExperience),
+    willingToRelocate,
+    earliestStartDate: str(obj.earliestStartDate),
+    signature: str(obj.signature),
+    savedAnswers,
+  };
+
+  return Object.values(profile).some((entry) => entry !== undefined) ? profile : undefined;
 }
 
 function migrateFromV1(raw: string): UserContext {

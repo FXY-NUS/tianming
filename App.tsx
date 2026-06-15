@@ -30,8 +30,9 @@ import {
   FileWarning,
   Key,
   RefreshCcw,
+  Plus,
 } from 'lucide-react';
-import { Job, UserContext, UserPreferences } from './types';
+import { ApplyProfile, Job, SavedAnswer, UserContext, UserPreferences } from './types';
 import {
   batchScreenJobs,
   deepAuditJob,
@@ -46,6 +47,7 @@ import { parseSalaryRangeDraft } from './services/preferenceValidation';
 import { ResumeModal } from './src/components/ResumeModal';
 import { PersonaSection } from './src/components/PersonaSection';
 import { ResumeMatchBreakdownCard } from './src/components/ResumeMatchBreakdownCard';
+import { ApplyAssistantPanel } from './src/components/ApplyAssistantPanel';
 import { migrateLocalStorageToIndexedDb } from './src/storage/migration';
 import {
   loadJobsFromIndexedDb,
@@ -57,8 +59,9 @@ import {
 } from './src/storage/repository';
 
 const LOCAL_STORAGE_KEY_USAGE = 'career_navigator_usage_v4';
+const MAX_SAVED_ANSWERS = 10;
 
-type ProfileTab = 'profile' | 'personas';
+type ProfileTab = 'profile' | 'apply' | 'personas';
 
 const splitListInput = (value: string): string[] =>
   value
@@ -67,6 +70,65 @@ const splitListInput = (value: string): string[] =>
     .filter(Boolean);
 
 const joinListInput = (value: string[]): string => value.join(', ');
+
+const createSavedAnswer = (): SavedAnswer => ({
+  id: `saved-answer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  label: '',
+  content: '',
+  updatedAt: new Date().toISOString(),
+});
+
+const isApplyProfileEmpty = (applyProfile?: ApplyProfile): boolean => {
+  if (!applyProfile) return true;
+  const hasField = [
+    applyProfile.fullName,
+    applyProfile.email,
+    applyProfile.phone,
+    applyProfile.location,
+    applyProfile.linkedIn,
+    applyProfile.github,
+    applyProfile.portfolio,
+    applyProfile.workAuthStatus,
+    applyProfile.yearsExperience,
+    applyProfile.willingToRelocate,
+    applyProfile.earliestStartDate,
+    applyProfile.signature,
+  ].some((value) => typeof value === 'string' && value.trim().length > 0);
+  return !hasField && (applyProfile.savedAnswers?.length ?? 0) === 0;
+};
+
+const normalizeApplyProfileForSave = (applyProfile?: ApplyProfile): ApplyProfile | undefined => {
+  if (!applyProfile) return undefined;
+  const trim = (value: string | undefined) => {
+    const next = value?.trim();
+    return next ? next : undefined;
+  };
+  const savedAnswers = (applyProfile.savedAnswers ?? [])
+    .slice(0, MAX_SAVED_ANSWERS)
+    .map((answer) => ({
+      ...answer,
+      label: answer.label.trim(),
+      content: answer.content.trim(),
+      updatedAt: answer.updatedAt || new Date().toISOString(),
+    }))
+    .filter((answer) => answer.label && answer.content);
+  const normalized: ApplyProfile = {
+    fullName: trim(applyProfile.fullName),
+    email: trim(applyProfile.email),
+    phone: trim(applyProfile.phone),
+    location: trim(applyProfile.location),
+    linkedIn: trim(applyProfile.linkedIn),
+    github: trim(applyProfile.github),
+    portfolio: trim(applyProfile.portfolio),
+    workAuthStatus: trim(applyProfile.workAuthStatus),
+    yearsExperience: trim(applyProfile.yearsExperience),
+    willingToRelocate: applyProfile.willingToRelocate,
+    earliestStartDate: trim(applyProfile.earliestStartDate),
+    signature: trim(applyProfile.signature),
+    savedAnswers: savedAnswers.length > 0 ? savedAnswers : undefined,
+  };
+  return isApplyProfileEmpty(normalized) ? undefined : normalized;
+};
 
 const getJobScore = (job: Job): number | undefined =>
   job.analysis?.matchScore?.overall ??
@@ -91,6 +153,25 @@ const scorePillClass = (score: number | undefined): string => {
   if (score < 40) return 'bg-slate-200 text-slate-500';
   return 'bg-indigo-600 text-white';
 };
+
+const ApplyInput = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) => (
+  <div className="space-y-4">
+    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{label}</label>
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full border-2 border-slate-100 p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+    />
+  </div>
+);
 
 const logStorageError = (error: unknown) => {
   console.error('IndexedDB storage error', error);
@@ -229,11 +310,13 @@ const App = () => {
       return;
     }
 
+    const applyProfile = normalizeApplyProfileForSave(updated.preferences.applyProfile);
     persistUserContext({
       ...updated,
       preferences: {
         ...updated.preferences,
         salaryRange: salaryResult.salaryRange,
+        applyProfile,
       },
     });
     setShowProfileModal(false);
@@ -460,12 +543,12 @@ const App = () => {
   const [salaryMinDraft, setSalaryMinDraft] = useState('');
   const [salaryMaxDraft, setSalaryMaxDraft] = useState('');
   const [salaryRangeError, setSalaryRangeError] = useState('');
-  const openProfileModal = () => {
+  const openProfileModal = (initialTab: ProfileTab = 'profile') => {
     setEditCtx(userCtx);
     setSalaryMinDraft(userCtx.preferences.salaryRange?.[0]?.toString() ?? '');
     setSalaryMaxDraft(userCtx.preferences.salaryRange?.[1]?.toString() ?? '');
     setSalaryRangeError('');
-    setProfileTab('profile');
+    setProfileTab(initialTab);
     setShowProfileModal(true);
   };
 
@@ -474,6 +557,87 @@ const App = () => {
       ...prev,
       preferences: { ...prev.preferences, ...updates },
     }));
+  };
+
+  const updateApplyProfile = (updates: Partial<ApplyProfile>) => {
+    setEditCtx((prev) => ({
+      ...prev,
+      preferences: {
+        ...prev.preferences,
+        applyProfile: {
+          ...(prev.preferences.applyProfile ?? {}),
+          ...updates,
+        },
+      },
+    }));
+  };
+
+  const updateSavedAnswer = (id: string, updates: Partial<SavedAnswer>) => {
+    setEditCtx((prev) => {
+      const current = prev.preferences.applyProfile ?? {};
+      const savedAnswers = (current.savedAnswers ?? []).map((answer) =>
+        answer.id === id ? { ...answer, ...updates, updatedAt: new Date().toISOString() } : answer,
+      );
+      return {
+        ...prev,
+        preferences: {
+          ...prev.preferences,
+          applyProfile: {
+            ...current,
+            savedAnswers,
+          },
+        },
+      };
+    });
+  };
+
+  const addSavedAnswer = () => {
+    setEditCtx((prev) => {
+      const current = prev.preferences.applyProfile ?? {};
+      const savedAnswers = current.savedAnswers ?? [];
+      if (savedAnswers.length >= MAX_SAVED_ANSWERS) return prev;
+      return {
+        ...prev,
+        preferences: {
+          ...prev.preferences,
+          applyProfile: {
+            ...current,
+            savedAnswers: [...savedAnswers, createSavedAnswer()],
+          },
+        },
+      };
+    });
+  };
+
+  const removeSavedAnswer = (id: string) => {
+    setEditCtx((prev) => {
+      const current = prev.preferences.applyProfile ?? {};
+      return {
+        ...prev,
+        preferences: {
+          ...prev.preferences,
+          applyProfile: {
+            ...current,
+            savedAnswers: (current.savedAnswers ?? []).filter((answer) => answer.id !== id),
+          },
+        },
+      };
+    });
+  };
+
+  const prefillApplyProfileFromActiveResume = () => {
+    const activeResume = editCtx.activeResumeId
+      ? editCtx.resumes.find((resume) => resume.id === editCtx.activeResumeId)
+      : undefined;
+    const basic = activeResume?.structured.basic;
+    if (!basic) return;
+    const current = editCtx.preferences.applyProfile ?? {};
+    updateApplyProfile({
+      fullName: current.fullName || basic.name || '',
+      email: current.email || basic.email || '',
+      phone: current.phone || basic.phone || '',
+      location: current.location || basic.location || '',
+    });
   };
 
   const updateSalaryRange = (bound: 'min' | 'max', rawValue: string) => {
@@ -488,6 +652,12 @@ const App = () => {
   const selectedMatchScore = selectedJob?.analysis?.matchScore ?? selectedJob?.matchScore;
   const selectedHasInsufficientData = hasInsufficientScoreData(selectedMatchScore);
   const selectedUnknownPercent = Math.round(getUnknownRatio(selectedMatchScore) * 100);
+  const switchActiveResume = (resumeId: string) => {
+    persistUserContext({ activeResumeId: resumeId });
+  };
+  const editingApplyProfile = editCtx.preferences.applyProfile ?? {};
+  const editingSavedAnswers = editingApplyProfile.savedAnswers ?? [];
+  const canAddSavedAnswer = editingSavedAnswers.length < MAX_SAVED_ANSWERS;
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
@@ -512,7 +682,7 @@ const App = () => {
                 {hasApiKey ? <Key size={16} /> : <AlertCircle size={16} />}
               </button>
               <button
-                onClick={openProfileModal}
+                onClick={() => openProfileModal()}
                 className="p-1.5 hover:bg-white/10 rounded-full transition-colors"
               >
                 <User size={18} />
@@ -780,6 +950,16 @@ const App = () => {
                       </div>
                     </div>
 
+                    <ApplyAssistantPanel
+                      job={selectedJob}
+                      applyProfile={userCtx.preferences.applyProfile}
+                      recommendedResume={selectedJob.analysis.recommended_resume}
+                      activeResumeId={userCtx.activeResumeId}
+                      resumes={userCtx.resumes}
+                      onSwitchResume={switchActiveResume}
+                      onOpenApplyProfile={() => openProfileModal('apply')}
+                    />
+
                     {selectedMatchScore && (
                       <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
                         <div className="flex items-center justify-between gap-4">
@@ -1025,6 +1205,7 @@ const App = () => {
               <div className="inline-flex rounded-xl bg-slate-100 p-1">
                 {[
                   { id: 'profile' as const, label: '基础档案' },
+                  { id: 'apply' as const, label: '投递助手' },
                   { id: 'personas' as const, label: 'Persona' },
                 ].map((tab) => (
                   <button
@@ -1156,6 +1337,185 @@ const App = () => {
                     />
                   </div>
                 </>
+              ) : profileTab === 'apply' ? (
+                <div className="space-y-8">
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <h4 className="font-black text-indigo-950">投递助手 · 常用字段</h4>
+                        <p className="mt-1 text-xs font-medium text-indigo-700">
+                          只用于本地复制。不会自动填表，不会自动提交，也不会调用 Gemini。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={prefillApplyProfileFromActiveResume}
+                        disabled={!editCtx.activeResumeId}
+                        className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        从激活简历预填
+                      </button>
+                    </div>
+                    {isApplyProfileEmpty(editingApplyProfile) && (
+                      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                        当前没有投递档案。可以手动填写，或先在简历管理中选择 active
+                        简历后预填基础信息。
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ApplyInput
+                      label="Full name"
+                      value={editingApplyProfile.fullName ?? ''}
+                      onChange={(value) => updateApplyProfile({ fullName: value })}
+                    />
+                    <ApplyInput
+                      label="Email"
+                      value={editingApplyProfile.email ?? ''}
+                      onChange={(value) => updateApplyProfile({ email: value })}
+                    />
+                    <ApplyInput
+                      label="Phone"
+                      value={editingApplyProfile.phone ?? ''}
+                      onChange={(value) => updateApplyProfile({ phone: value })}
+                    />
+                    <ApplyInput
+                      label="Location"
+                      value={editingApplyProfile.location ?? ''}
+                      onChange={(value) => updateApplyProfile({ location: value })}
+                    />
+                    <ApplyInput
+                      label="LinkedIn"
+                      value={editingApplyProfile.linkedIn ?? ''}
+                      onChange={(value) => updateApplyProfile({ linkedIn: value })}
+                    />
+                    <ApplyInput
+                      label="GitHub"
+                      value={editingApplyProfile.github ?? ''}
+                      onChange={(value) => updateApplyProfile({ github: value })}
+                    />
+                    <ApplyInput
+                      label="Portfolio"
+                      value={editingApplyProfile.portfolio ?? ''}
+                      onChange={(value) => updateApplyProfile({ portfolio: value })}
+                    />
+                    <ApplyInput
+                      label="Work authorization"
+                      value={editingApplyProfile.workAuthStatus ?? ''}
+                      onChange={(value) => updateApplyProfile({ workAuthStatus: value })}
+                    />
+                    <ApplyInput
+                      label="Years of experience"
+                      value={editingApplyProfile.yearsExperience ?? ''}
+                      onChange={(value) => updateApplyProfile({ yearsExperience: value })}
+                    />
+                    <div className="space-y-4">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        Willing to relocate
+                      </label>
+                      <select
+                        value={editingApplyProfile.willingToRelocate ?? ''}
+                        onChange={(event) =>
+                          updateApplyProfile({
+                            willingToRelocate:
+                              event.target.value === ''
+                                ? undefined
+                                : (event.target.value as ApplyProfile['willingToRelocate']),
+                          })
+                        }
+                        className="w-full border-2 border-slate-100 bg-white p-4 rounded-2xl text-sm focus:border-indigo-500 outline-none transition-all"
+                      >
+                        <option value="">未填写</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                        <option value="depends">Depends</option>
+                      </select>
+                    </div>
+                    <ApplyInput
+                      label="Earliest start date"
+                      value={editingApplyProfile.earliestStartDate ?? ''}
+                      onChange={(value) => updateApplyProfile({ earliestStartDate: value })}
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      Email signature
+                    </label>
+                    <textarea
+                      value={editingApplyProfile.signature ?? ''}
+                      onChange={(event) => updateApplyProfile({ signature: event.target.value })}
+                      className="w-full border-2 border-slate-100 p-5 rounded-3xl text-sm h-28 focus:border-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                          Saved answers
+                        </label>
+                        <p className="mt-1 text-xs font-medium text-slate-400">
+                          用户手写模板，最多 {MAX_SAVED_ANSWERS} 条。邮件模式可选择其中一条。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addSavedAnswer}
+                        disabled={!canAddSavedAnswer}
+                        className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Plus size={14} /> 新增模板
+                      </button>
+                    </div>
+
+                    {editingSavedAnswers.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-bold text-slate-400">
+                        暂无 saved answer。常用的 Why this company / Why good fit
+                        可以放这里，投递时直接复制进邮件。
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {editingSavedAnswers.map((answer, index) => (
+                          <div
+                            key={answer.id}
+                            className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-xs font-black text-slate-400">
+                                模板 {index + 1}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeSavedAnswer(answer.id)}
+                                className="text-xs font-black text-rose-500 hover:text-rose-600"
+                              >
+                                删除
+                              </button>
+                            </div>
+                            <input
+                              value={answer.label}
+                              onChange={(event) =>
+                                updateSavedAnswer(answer.id, { label: event.target.value })
+                              }
+                              placeholder="例如：Why interested in startup?"
+                              className="w-full border-2 border-white bg-white p-3 rounded-xl text-sm focus:border-indigo-500 outline-none transition-all"
+                            />
+                            <textarea
+                              value={answer.content}
+                              onChange={(event) =>
+                                updateSavedAnswer(answer.id, { content: event.target.value })
+                              }
+                              placeholder="粘贴你自己写好的通用回答。这里不会 AI 润色。"
+                              className="w-full border-2 border-white bg-white p-3 rounded-xl text-sm h-28 focus:border-indigo-500 outline-none transition-all"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <PersonaSection ctx={editCtx} onChange={setEditCtx} />
               )}
