@@ -1,4 +1,4 @@
-# Tianming · 项目交接文档 v2.0
+# Tianming · 项目交接文档 v2.1
 
 > 本文档是 Tianming 项目的工程交接 brief，供任何接手开发的 AI 助手或工程师阅读。
 > 阅读顺序：从上往下读完整份，不要跳读，所有决策都有依赖关系。
@@ -218,9 +218,13 @@ PDF / DOCX / 图片 / 文本统一交给 Gemini，输出结构化 JSON。**不�
 扩展包是公开的，API Key 塞进去会被反编译盗用。扩展只抽取 JD 数据，
 通过 Chrome Storage 传给 Web App，LLM 调用永远在 Web App 一侧。
 
-### D6. 简历不上云
-简历原文件默认仅本地 IndexedDB Blob 存储；结构化数据可上云但需 PII 脱敏。
-**这是隐私红线**。
+### D6. 简历原文件永不存储于本产品服务器（v2.1 措辞修正）
+简历原文件默认仅本地 IndexedDB Blob 存储，**永不上传到本产品的任何服务器/数据库**；结构化数据可上云但需 PII 脱敏。**这是隐私红线**。
+
+**v2.1 澄清（盲区 H1 修正，随 D13 产品化触发）**：当前解析流程（Phase 3，`services/resumeParser.ts`）会把简历文件内容（base64）发送给 **Google Gemini API** 做多模态解析，即用即弃、不落任何库。所以"不上云"的准确含义是"不存储于我们的云"，**不是"简历不离开设备"**。产品化后的硬要求：
+1. 对外文案（UI / 隐私说明 / README / 商店描述）**禁止**使用"简历不上云 / 简历不离开设备"类表述；统一为："简历文件仅发送给 Google Gemini API 用于解析，本产品不存储你的简历原文件。"
+2. 简历上传入口首次使用时必须有一次性告知（发送给谁、用来干什么、是否存储）。
+3. BYOK 阶段在 key 设置界面建议用户使用付费层 API key（免费层条款允许 Google 将输入用于产品改进）。
 
 ### D7. 双层匹配引擎
 - **Flash 初筛**：用 ResumeStructured 的硬性条件（经验/学历/语言）+ Personas 简版做粗筛
@@ -291,6 +295,17 @@ Pro 深审装配从「单份激活简历」改为「所有简历的 union」，�
 4. **推荐简历**：审计层用 union 跑分 + narrative，输出 `recommended_resume = { resumeId, label, reasoning, edits_suggestion: string[] }`。**LLM 仍不出 overall / judgment 分数**——铁律 1 不破。
 
 **铁律守门**：D12 升级后 6 条评分铁律全部保留——Gemini 输出 evidence + source + recommended_resume narrative，最终分数仍由 `src/core/scoringEngine.ts` 算。
+
+### D13. 产品化转向（2026-07-07 用户拍板）
+
+作品集使命已完成一轮（项目已帮用户拿到实习），**重心转为真实产品 + 商业化试验**；作品集角色保留但不再主导决策。随之确认的方向性子决策：
+
+1. **数据获取以手动为一等公民**：手动粘贴 UX 是长期主线（用户明确要求非全自动流程，与 North Star 一致）；浏览器扩展是便利层而非前提；**不引入第三方爬取服务（Apify 等）**——商业产品直接持有平台爬取数据的合规风险不可接受（区别于企业内部工具场景）。
+2. **多语言**：UI 将做中英双语，最晚随 M3/Phase 7 UI 重做一起落地。
+3. **模型可配置**：模型 ID 从硬编码 preview 版改为「用户可选 + 默认值可配置」（吸收盲区 H5），只提供当前 GA 的 Gemini 模型作为选项；实现挂 D10 provider 抽象之下，优先级排 M1 之后。
+4. **盈利模式暂不定**：BYOK 门槛过高、订阅未验证——先用配额控制成本结构（后端代理阶段每用户限额），验证需求后再定价；盈利模式明确前不投入付费基建。
+5. **安全加强**按 `doc/security-plan.md` 三阶段执行（BYOK 加固 → Phase 6 代理安全 → 上架 checklist）。
+6. **隐私措辞修正**（盲区 H1）：见 D6 v2.1 澄清。
 
 ### D10. 多 Provider 抽象（**预留，不实现**）
 为防止"换模型导致前后打分不一致"，未来允许接 Claude / OpenAI / DeepSeek，但实现服从以下约束：
@@ -755,7 +770,7 @@ export interface MatchContext {
 
 1. **永远不 commit `.env.local`**（已在 .gitignore）
 2. **永远不硬编码 API Key 到源代码**
-3. **永远不把简历原文上云**（PII 红线）
+3. **简历原文件永不存储于本产品服务器**（PII 红线）；解析时发送 Gemini API 的事实必须向用户如实披露，对外文案禁用"不上云 / 不离开设备"表述（见 D6 v2.1 澄清）
 4. **公网部署前必须引入后端代理**（API Key 不能暴露给浏览器）
 5. **浏览器扩展不直连 Gemini**（扩展包可被反编译，Key 必盗）
 6. 任何对外文档 / 截图前，**确认没有真实 PII / Key**
@@ -940,7 +955,7 @@ main (始终可发布)
 6. `JobCardSnapshot`（卡片粗筛）vs `JobDetail`（完整 audit）两层评分；卡片信息不全时维度数会少。
 
 **隐私 + 合规铁律**：
-1. 简历原文件不上云（PII 红线，D6）。
+1. 简历原文件永不存储于本产品服务器（D6）；发送 Gemini 解析的事实必须向用户如实披露，对外文案禁用"不上云 / 不离开设备"表述。
 2. API Key 不进 repo / 不进扩展包；BYOK 仅当前阶段，Phase 6 起必须后端代理（D5 + D9）。
 3. 浏览器扩展不批量爬，只读已加载卡片 + 用户主动点开的详情（D4'）。
 
@@ -951,6 +966,8 @@ main (始终可发布)
 - 不要混用 Codex 本地工作流和 Claude Code 云端工作流（见 §0.0）。
 
 ---
+
+*文档版本 v2.1 · 2026-07-07 · **D13 产品化转向**（用户拍板：实习已到手，重心转产品/商业化试验；手动粘贴为一等公民 · 不用第三方爬取 · 双语化最晚 M3 · 模型可配置 · 盈利模式后置）+ **D6 v2.1 隐私措辞修正**（盲区 H1：如实披露 Gemini 处理，对外禁用"不上云/不离开设备"表述，§7 / §11 同步）+ 新增 `doc/security-plan.md` 三阶段安全计划*
 
 *文档版本 v2.0 · 2026-07-07 · Phase 5.5 状态升 ✅ Done（PR #34）· 吸收未合并分支 `claude/amazing-archimedes-qelbP`（a7ff444）的 v1.9 草稿（该分支此前从未合 main，但其 Phase 5.5 brief 已被 PR #34 按 spec 实现——本次补录入库，分支可删）· 新增 `doc/STATE.md` 状态快照层（§11 新 session 第一步加第 0 步；重复接手不再强制全文重读）· 新增 `.claude/skills/` 四个项目技能（brief-writer / adversarial-prompt-review / iron-rules-review / handoff-sync，任何 Claude 模型 session 可调用）· §10.2 prompt 行为预测 review 增加 Claude Code 云端 skill 备选路径 · `doc/briefs/grok-replies/` 目录补建（修复 §10.4 悬空引用）· 全套优化依据见 `doc/usage-analysis.md`*
 

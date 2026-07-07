@@ -41,6 +41,7 @@
 - 本地 `npm run dev` 可正常调用 Gemini API
 - Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done（main 状态）：工具链 + UserContext + Persona 插件系统 + MBTI/RIASEC polish + 简历上传解析 + Match/Scoring Engine + 简历 Union 技能覆盖 + `ResumeMatchBreakdownCard` UI 接入（PR #27）+ Dexie 存储完整迁移（PR #26）。详见 `doc/HANDOFF.md` §2、`doc/phase-2-8-notes.md`、`doc/scoring-rubric.md`。
 - `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8.x（**ML 学权重，归 Track F**）浏览器端轻量学习铺垫。
+- **方向（2026-07-07 拍板，HANDOFF §4 D13）**：**产品化优先**，作品集角色退居其次；手动粘贴为一等公民、不用第三方爬取、双语化最晚 M3、模型可配置、盈利模式后置；隐私对外措辞已修正（D6 v2.1）；安全路线见 `doc/security-plan.md`。
 - **当前焦点**：**M1 收尾**。Phase 4.6 数据层 ✅ Done（PR #31）+ **Phase 5.5 Apply Assistant L2 ✅ Done（PR #34**：`ApplyProfile` + `savedAnswers` + 邮件模式 + `recommended_resume` 最简文字 banner 占位，全程零 LLM，详见 `doc/phase-5-5-notes.md`）。4.6 完整视觉 2f/2g 延后到 M3 跟 Claude Design polish 一起做。**M1 剩余**：简历多版本切换 UX 整理 + 反通胀端到端 smoke → 宣告 M1 Done 转 M2 浏览器扩展。**接手先读 `doc/STATE.md`（当前状态快照 + 重入锚点）**；North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；五方分工见 §10.2；brief 模板见 §10.4。
 
 ## 三、Tech Stack
@@ -104,7 +105,7 @@ interface UserContext {
 ## 六、隐私红线（详见 `doc/HANDOFF.md` §7 + D4'/D5/D6/D9）
 
 - 永远不 commit `.env.local` / 不硬编码 API Key 到源代码。
-- **简历原文件永远不上云**（PII 红线，对应架构决策 D6）；结构化数据可上云但需 PII 脱敏。
+- **简历原文件永不存储于本产品的服务器**（PII 红线，D6 v2.1 澄清）：解析时文件内容会发送给 Google Gemini API（即用即弃、不落库），必须向用户如实披露；对外文案禁用"简历不上云 / 不离开设备"类表述。结构化数据可上云但需 PII 脱敏。
 - 公网部署前必须引入后端代理（API Key 不能暴露给浏览器）。Phase 6 起硬约束（D9）。
 - 浏览器扩展不直连 Gemini（扩展包可被反编译，Key 必盗，D5）。
 - **浏览器扩展不批量爬**：只读当前页已加载卡片 + 用户主动点开的详情；不后台批量自动请求（D4'，防封号 + 合规）。
