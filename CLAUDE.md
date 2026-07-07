@@ -9,12 +9,15 @@
 
 如果当前运行环境是 **Claude Code 云端 GitHub workspace**，新 session 开始时先读：
 
-1. `doc/agent-workflow.md`：判断运行环境，不混用本地/云端规则。
-2. `claudecode.md`：Claude Code 云端开发 SOP。
-3. `doc/HANDOFF.md` v1.8：项目总交接（**§1.5 North Star + §4 D1-D12 + §5.0 Tracks/Milestones + §10.2 五方分工 + §10.4 任务分发 brief 模板 + §11 接力指令的 6 条评分铁律必读**）。
-4. `doc/scoring-rubric.md`：Phase 4 评分体系（Pass A/B/C 三层 + LLM 抽证据 / 代码算分根原则 + §6 Phase 8.x ML 反馈闭环方向）。
-5. 当前 Phase notes，例如 Phase 4 期间读 `doc/phase-4-notes.md`，Phase 5 期间读 `doc/phase-5-notes.md`（如果存在）。
-6. `doc/briefs/`：限时会员窗口给 Claude Design / Super Grok 的任务包；未来新 agent 接入也走这里。
+1. `doc/STATE.md`：**当前状态快照 + 重入锚点**（≤50 行，30 秒重入；它指向本轮真正需要读的章节，避免每次全量重读）。
+2. `doc/agent-workflow.md`：判断运行环境，不混用本地/云端规则。
+3. `claudecode.md`：Claude Code 云端开发 SOP。
+4. `doc/HANDOFF.md` v2.0：项目总交接（**§1.5 North Star + §4 D1-D12 + §5.0 Tracks/Milestones + §10.2 五方分工 + §10.4 任务分发 brief 模板 + §11 接力指令的 6 条评分铁律必读**）。首次接手全文读；重复接手可按 STATE.md 指引只读变更章节。
+5. `doc/scoring-rubric.md`：Phase 4 评分体系（Pass A/B/C 三层 + LLM 抽证据 / 代码算分根原则 + §6 Phase 8.x ML 反馈闭环方向）。
+6. 当前 Phase notes，例如 Phase 4 期间读 `doc/phase-4-notes.md`，Phase 5 期间读 `doc/phase-5-notes.md`（如果存在）。
+7. `doc/briefs/`：限时会员窗口给 Claude Design / Super Grok 的任务包；未来新 agent 接入也走这里。
+
+仓库自带 **`.claude/skills/`** 项目技能（brief-writer / adversarial-prompt-review / iron-rules-review / handoff-sync），任何 Claude 模型（含 Opus）的 session 均可直接以 `/技能名` 调用，用于固化 brief 撰写、prompt 对抗 review、PR 铁律守门、文档同步四个高频仪式。
 
 关键提醒：
 
@@ -38,7 +41,7 @@
 - 本地 `npm run dev` 可正常调用 Gemini API
 - Phase 0/1/2/2.6/2.8/3/4/4.5/5A/5B ✅ Done（main 状态）：工具链 + UserContext + Persona 插件系统 + MBTI/RIASEC polish + 简历上传解析 + Match/Scoring Engine + 简历 Union 技能覆盖 + `ResumeMatchBreakdownCard` UI 接入（PR #27）+ Dexie 存储完整迁移（PR #26）。详见 `doc/HANDOFF.md` §2、`doc/phase-2-8-notes.md`、`doc/scoring-rubric.md`。
 - `UserContext.feedbackRecords?: MatchFeedbackRecord[]` 字段已预留，给 Phase 8.x（**ML 学权重，归 Track F**）浏览器端轻量学习铺垫。
-- **当前焦点**：**Phase 4.6 数据/评分/prompt 层已合并（PR #31），UI 层未接**。子任务 2a–2e（`buildResumeUnionSection` + `recommended_resume` 字段 + `applyUnionWeightPenalty` 防通胀 + `sourceResumeIds` + `scoringVersion` bump 到 `phase4-scoring-v2.0` / `rubricVersion` `rubric-v1.1`）已落地；子任务 **2f–2g（推荐简历 banner + `ResumeMatchBreakdownCard` 展示）尚未做**——`recommended_resume` 已被算出但 `App.tsx` 未渲染，等 Claude Design 设计稿或并入 Phase 7。决策见 HANDOFF §4 D12。CC 下一步候选：Phase 4.6 UI 收尾（2f–2g）/ Phase 5.5 Apply Assistant L2 / Phase 2.7 六爻插件 / Phase 8 Cover Letter。**North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；五方分工见 §10.2；brief 模板见 §10.4。**
+- **当前焦点**：**M1 收尾**。Phase 4.6 数据层 ✅ Done（PR #31）+ **Phase 5.5 Apply Assistant L2 ✅ Done（PR #34**：`ApplyProfile` + `savedAnswers` + 邮件模式 + `recommended_resume` 最简文字 banner 占位，全程零 LLM，详见 `doc/phase-5-5-notes.md`）。4.6 完整视觉 2f/2g 延后到 M3 跟 Claude Design polish 一起做。**M1 剩余**：简历多版本切换 UX 整理 + 反通胀端到端 smoke → 宣告 M1 Done 转 M2 浏览器扩展。**接手先读 `doc/STATE.md`（当前状态快照 + 重入锚点）**；North Star + Tracks/Milestones 见 HANDOFF §1.5 + §5.0；五方分工见 §10.2；brief 模板见 §10.4。
 
 ## 三、Tech Stack
 
@@ -63,9 +66,9 @@
 | 3 | 简历上传 + Gemini 多模态结构化解析 | ✅ Done |
 | 4 | Match Engine + Scoring Engine（可解释评分 + 统一上下文装配）| ✅ Done |
 | 4.5 | 简历 Union 技能覆盖对比（scoring + UI）+ `ResumeMatchBreakdownCard` 接入 | ✅ Done · PR #27 |
-| 4.6 | Pro 深审 union prompt + `recommended_resume`（推荐简历 + edits_suggestion） | 🟡 数据/评分/prompt 层 ✅ Done · PR #31（2a–2e）；UI banner 2f–2g ⏸ 未接 |
+| 4.6 | Pro 深审 union prompt + `recommended_resume` schema · 最简 banner 已随 PR #34 占位 · 完整视觉 2f/2g 延后 M3 | ✅ 数据层 Done · PR #31 |
 | 5 | 存储升级 localStorage → Dexie（同时根治 Phase 4 A1 数据丢失）| ✅ Done · PR #26 |
-| 5.5 | Apply Assistant L2（投递助手 · 结构化字段一键复制）| ⏸ 排队（4.6 合后）|
+| 5.5 | Apply Assistant L2（ApplyProfile + savedAnswers + 邮件模式 · 零 LLM）| ✅ Done · PR #34 |
 | 6 | 浏览器扩展（MV3）+ 后端代理雏形（API Key 移出前端）| |
 | 7 | UI 整体调整 + 简历多版本管理 | |
 | 8 | Cover Letter 生成 / 简历针对性优化建议（**Track D 文案反向赋能**） | |
