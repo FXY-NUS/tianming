@@ -51,7 +51,7 @@ describe('TianmingDb', () => {
       schemaVersion: 1,
       preferences: {
         ...DEFAULT_USER_CONTEXT.preferences,
-        displayName: '阿棠',
+        displayName: '张三',
         preferredLocations: ['Singapore'],
       },
       activeResumeId: 'resume-1',

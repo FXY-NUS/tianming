@@ -49,7 +49,7 @@ function sampleUserContext(): UserContext {
     ...DEFAULT_USER_CONTEXT,
     preferences: {
       ...DEFAULT_USER_CONTEXT.preferences,
-      displayName: '阿棠',
+      displayName: '张三',
       preferredLocations: ['Singapore'],
     },
     personas: [
@@ -125,7 +125,7 @@ describe('migrateLocalStorageToIndexedDb', () => {
     });
 
     await expect(testDb.userContext.get(USER_CONTEXT_RECORD_ID)).resolves.toMatchObject({
-      preferences: expect.objectContaining({ displayName: '阿棠' }),
+      preferences: expect.objectContaining({ displayName: '张三' }),
       activeResumeId: 'resume-1',
       activePersonaIds: ['mbti-1'],
       updatedAt: NOW,

@@ -12,11 +12,11 @@ import {
 const LEGACY_PROFILE_KEY = 'career_navigator_profile';
 
 const fullLegacy: LegacyProfile = {
-  name: '阿棠',
+  name: '张三',
   bg: '23 岁，CS 应届',
   astrology: '射手座',
   preferences: '远程 / 北上深',
-  resumeContent: '王阿棠 ｜ CS @ 某大学 2026 届',
+  resumeContent: '张三 ｜ CS @ 某大学 2026 届',
 };
 
 const v1Context = {
