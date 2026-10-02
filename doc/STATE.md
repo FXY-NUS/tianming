@@ -49,3 +49,9 @@
 - 用法和结构见 `extension/README.md`。
 - 免 npm 安装：CI 每次构建上传扩展安装包（Actions 运行页 Artifacts）；天命网址构建时取仓库变量 `TIANMING_APP_URL`（缺省 localhost:3000），装好后也可在扩展设置页改。部署上线后记得设这个变量。
 - 卡片徽章已接评分：卡片经 bridge 交给打开着的天命页面，复用现有批量初筛（不改评分和提示词），只回档位和理由；天命页面没开就「未评分」。见 `services/extensionTriage.ts`。
+
+## Phase 6.5 · 投递页复制侧栏（并行线程 · 2026-10-02）
+
+- 在任意投递页点扩展图标，右侧出现可收起的「天命 · 复制助手」侧栏：投递档案、当前简历要点、已存回答（LinkedIn 详情页另有邮件正文），每条一个复制按钮。只复制，不 autofill、不提交（D11 L3）。
+- 内容每次打开时经 bridge 向打开着的天命页面要（`services/copyKit.ts` 拼装），只在侧栏内存里，关闭即丢，不进 `chrome.storage`（D6）；天命没开就提示先打开。分支 `feat/apply-copy-helper-iy3q2m`，叠在扩展评分分支上。
+- 下一步：真浏览器里在 Greenhouse / Workday / LinkedIn Easy Apply 各点一次，看侧栏和复制是否被页面拦。
