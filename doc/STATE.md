@@ -34,3 +34,9 @@
 
 ---
 *STATE v1.0 · 2026-07-07 · 初版，由使用效率分析（`doc/usage-analysis.md`）引入*
+
+## M2 · 浏览器扩展（并行推进中）
+
+- `extension/`：LinkedIn MV3 扩展骨架 + 卡片徽章 + 详情「送进天命」按钮（Phase 6.1–6.3），分支 `feat/linkedin-extension-t85ahi`。
+- 粗筛评分只留了 `extension/src/scoring.ts` 一个适配层，等后端代理（Phase 6.4）定接口后接入；在那之前徽章一律「未评分」。
+- 用法和结构见 `extension/README.md`。
