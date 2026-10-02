@@ -7,6 +7,7 @@ export const BADGE_CLASS = 'tianming-badge';
 const BADGE_STYLE: Record<BadgeState, { label: string; background: string; color: string }> = {
   pending: { label: '天命 · 评分中', background: '#e2e8f0', color: '#475569' },
   unscored: { label: '天命 · 未评分', background: '#e2e8f0', color: '#475569' },
+  retry_later: { label: '天命 · 稍后重试', background: '#f1f5f9', color: '#64748b' },
   need_full_jd: { label: '天命 · 需看全文', background: '#fef3c7', color: '#92400e' },
   pass: { label: '天命 · 合适', background: '#dcfce7', color: '#166534' },
   maybe: { label: '天命 · 可看看', background: '#e0e7ff', color: '#3730a3' },

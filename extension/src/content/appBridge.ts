@@ -5,10 +5,14 @@ import {
 } from '../../../services/extensionProtocol';
 import { PENDING_JOBS_KEY } from '../messages';
 import { removeAcked } from '../pendingQueue';
+import { unscoredResults, NO_APP_REASON } from '../scoring';
+import { createTriageRelay } from '../triageRelay';
+import type { JobCardSnapshot } from '../../../src/core/matchTypes';
 
 /**
  * 注入到天命页面的桥：把 chrome.storage 里的待送队列用 postMessage 交给 App，
  * 收到 App 的 ack 后出队。页面 JS 拿不到 chrome.storage，所以必须经这一层。
+ * 卡片粗筛也走这里：service worker 发来卡片 → 交给页面打分 → 结果回给 service worker。
  */
 
 const readQueue = async (): Promise<CapturedJob[]> => {
@@ -18,6 +22,10 @@ const readQueue = async (): Promise<CapturedJob[]> => {
 };
 
 let appReady = false;
+
+const triageRelay = createTriageRelay({
+  post: (message) => window.postMessage(message, location.origin),
+});
 
 const deliver = async () => {
   if (!appReady) return;
@@ -35,6 +43,10 @@ window.addEventListener('message', (event) => {
     void deliver();
     return;
   }
+  if (message.type === 'triage-result') {
+    triageRelay.handleResult(message);
+    return;
+  }
   void (async () => {
     const queue = await readQueue();
     await chrome.storage.local.set({ [PENDING_JOBS_KEY]: removeAcked(queue, message.externalIds) });
@@ -45,3 +57,20 @@ window.addEventListener('message', (event) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes[PENDING_JOBS_KEY]) void deliver();
 });
+
+chrome.runtime.onMessage.addListener(
+  (message: { type?: string; cards?: JobCardSnapshot[] }, _sender, sendResponse) => {
+    if (message?.type !== 'triage' || !Array.isArray(message.cards)) return false;
+    const cards = message.cards;
+    if (!appReady) {
+      sendResponse({ results: unscoredResults(cards, NO_APP_REASON) });
+      return false;
+    }
+    void triageRelay.request(cards).then((results) =>
+      sendResponse({
+        results: results ?? unscoredResults(cards, '评分超时，刷新 LinkedIn 页面可重试'),
+      }),
+    );
+    return true;
+  },
+);

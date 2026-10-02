@@ -28,7 +28,7 @@ TIANMING_APP_URL=https://你的天命网址 npm run build:extension   # 换默�
 
 ## 使用
 
-1. 打开 LinkedIn 岗位搜索页，滚动时视口里的卡片右上角出现「天命 · …」徽章。后端代理接上前一律显示「未评分」。
+1. 先打开天命页面，再打开 LinkedIn 岗位搜索页，滚动时视口里的卡片右上角出现「天命 · …」徽章。天命页面没开时显示「未评分」。
 2. 点开某个岗位，详情区顶部出现「送进天命」按钮。点一下，JD 进入待送队列；按钮变成「已加入天命 · 打开天命」，再点切到天命标签页。
 3. 天命页面打开着（或之后打开），岗位自动出现在列表顶部，和粘贴导入走同一条路（`services/jobImport.ts`），按「标题-公司」和链接去重。
 
@@ -43,12 +43,16 @@ TIANMING_APP_URL=https://你的天命网址 npm run build:extension   # 换默�
 | `src/appUrl.ts` | 天命网址：构建时默认值 + 用户自填，校验和 match pattern |
 | `src/bridgeRegistration.ts` | 自填网址时把 bridge 动态注册到该站点 |
 | `src/options/` | 扩展设置页（填天命网址） |
-| `src/scoring.ts` | 粗筛评分适配层，唯一的代理接入点（现在返回「未评分」） |
+| `src/scoring.ts` | 粗筛评分适配层：把卡片交给天命标签页，没开就「未评分」 |
+| `src/triageRelay.ts` | bridge 里按 requestId 中转粗筛请求和结果 |
 | `../services/extensionProtocol.ts` | 扩展与 Web App 共用的消息格式 |
 | `test/` | 用保存下来的 LinkedIn 页面片段做的测试（`npm test` 一起跑） |
 
-## 接后端代理（Phase 6.4）
+## 卡片评分（Phase 6.2）
 
-代理已合入 main，契约见 `doc/backend-proxy.md`（`POST /api/generate`，请求形状复用 `server/contract.ts`）。但扩展不能直接调代理给卡片打分：`scoreBatchScreenRecord` 需要完整的 `UserContext`（简历、偏好、画像），这些只在天命 Web App 的 IndexedDB 里，扩展拿不到，也不该把简历数据复制进扩展存储（D6）。
+扩展自己不调 Gemini，也拿不到简历和画像（D5 / D6）。卡片快照经 `appBridge` 交给**打开着的天命页面**：Web App 用自己的画像走现有批量初筛（Flash 抽证据 → `scoreBatchScreenRecord` 代码算分，goal = `triage`），只把档位和一句理由回给扩展，画像和分数明细不出 Web App。评分逻辑和提示词一个字没改，见 `services/extensionTriage.ts`。
 
-下一步的做法：卡片快照经 `appBridge` 交给打开着的天命页面，由 Web App 照旧调 Flash 抽证据、`scoreBatchScreenRecord` 算分，再把档位回给扩展。`src/scoring.ts` 的 `getTriageScorer()` 是唯一切换点，content script 和徽章不用动。天命页面没打开、或请求失败时降级为「未评分」。徽章状态：`pass` / `maybe` / `reject` / `need_full_jd` / `unscored`。
+- 徽章：`pass`（合适）/ `maybe`（可看看）/ `reject`（不太合适）/ `need_full_jd`（信息不够，点开看全文）/ `unscored`（没评上）/ `retry_later`（被限流，稍后重试）。鼠标悬停看分数和理由。
+- 部署后的代理有限流（超了返回 429）：被限流的卡片显示「稍后重试」，天命页面 1 分钟内不再调 LLM，扩展约 65 秒后把这些卡片合成一批补评一次，每张卡最多补评 3 次。
+- 天命页面没打开时一律「未评分」，扩展不会替你开标签页；打开天命后刷新 LinkedIn 页面即可评分。
+- 每批最多 30 张卡片；同一会话里每张卡片只评一次（Flash 调用计入天命页面的用量统计）。
