@@ -5,6 +5,8 @@
   "name": "tianming",
   "main": "server/worker.ts",
   "compatibility_date": "2025-09-01",
+  // 始终保留 *.workers.dev 网址；挂自有域名（部署时的 --domain）后它仍可用作备用入口。
+  "workers_dev": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

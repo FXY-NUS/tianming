@@ -1,0 +1,126 @@
+name: Deploy
+
+# 只能手动触发：在 Actions → Deploy → Run workflow，输入框里填 deploy 才会真的部署。
+# 合并到 main 不会自动上线。所需 secrets 没配齐时只写一条说明然后跳过，不会变红。
+# 设置步骤见 doc/backend-proxy.md §7。
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: '确认部署到公网：填 deploy'
+        required: true
+        default: ''
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
+      CUSTOM_DOMAIN: ${{ vars.TIANMING_CUSTOM_DOMAIN }}
+      TIANMING_APP_URL: ${{ vars.TIANMING_APP_URL }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Check confirmation and secrets
+        id: preflight
+        run: |
+          skip() {
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### 跳过部署"
+              echo ""
+              echo "$1"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Deploy skipped::$1"
+            exit 0
+          }
+          [ "$CONFIRM" = "deploy" ] || skip "输入框没有填 deploy，这次什么都没做。"
+          missing=""
+          [ -z "$CLOUDFLARE_API_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -z "$GEMINI_API_KEY" ] && missing="$missing GEMINI_API_KEY"
+          if [ -n "$missing" ]; then
+            skip "仓库 secrets 缺少：${missing# }。在 Settings → Secrets and variables → Actions 里添加后再运行（doc/backend-proxy.md §7）。"
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.preflight.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.preflight.outputs.ready == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        if: steps.preflight.outputs.ready == 'true'
+        run: npm ci
+
+      # 网页和代理同源，不需要 VITE_TIANMING_API_BASE。设了 PROXY_TOKEN 时网页要带上它（会进网页 JS，见 §7）。
+      - name: Build web app
+        if: steps.preflight.outputs.ready == 'true'
+        env:
+          VITE_TIANMING_PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
+        run: npm run build
+
+      # 域名不写在仓库里：设了仓库变量 TIANMING_CUSTOM_DOMAIN 才挂到自有域名。
+      - name: Deploy Worker
+        if: steps.preflight.outputs.ready == 'true'
+        run: |
+          args=""
+          [ -n "$CUSTOM_DOMAIN" ] && args="--domain $CUSTOM_DOMAIN"
+          npx --yes wrangler@4 deploy $args | tee "$RUNNER_TEMP/deploy.log"
+
+      # secret 走标准输入，不出现在命令行和日志里。
+      - name: Upload Worker secrets
+        if: steps.preflight.outputs.ready == 'true'
+        run: |
+          printf '%s' "$GEMINI_API_KEY" | npx --yes wrangler@4 secret put GEMINI_API_KEY
+          if [ -n "$PROXY_TOKEN" ]; then
+            printf '%s' "$PROXY_TOKEN" | npx --yes wrangler@4 secret put PROXY_TOKEN
+          fi
+
+      - name: Health check
+        if: steps.preflight.outputs.ready == 'true'
+        run: |
+          url="$TIANMING_APP_URL"
+          [ -z "$url" ] && [ -n "$CUSTOM_DOMAIN" ] && url="https://$CUSTOM_DOMAIN"
+          [ -z "$url" ] && url="$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -n 1 || true)"
+          url="${url%/}"
+          if [ -z "$url" ]; then
+            {
+              echo "### 部署完成，但没找到网址"
+              echo ""
+              echo "到 Cloudflare 控制台 Workers & Pages → tianming 查看，并填进仓库变量 TIANMING_APP_URL。"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS "$url/api/health"; then
+              echo ""
+              {
+                echo "### 已部署"
+                echo ""
+                echo "网址：$url"
+                if [ -z "$TIANMING_APP_URL" ]; then
+                  echo ""
+                  echo "把这个网址填进仓库变量 TIANMING_APP_URL（doc/backend-proxy.md §7）。"
+                fi
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error title=Health check failed::$url/api/health did not answer"
+          exit 1
