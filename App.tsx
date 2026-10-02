@@ -51,6 +51,7 @@ import { PersonaSection } from './src/components/PersonaSection';
 import { ResumeMatchBreakdownCard } from './src/components/ResumeMatchBreakdownCard';
 import { ApplyAssistantPanel } from './src/components/ApplyAssistantPanel';
 import { PasteJobModal } from './src/components/PasteJobModal';
+import { getLlmMode } from './services/llmClient';
 import {
   jobFromPastedText,
   jobsFromImportPayload,
@@ -162,6 +163,8 @@ const scorePillClass = (score: number | undefined): string => {
   return 'bg-indigo-600 text-white';
 };
 
+// 代理模式（默认）下 Key 只在服务端，前端不再需要也不再保存 Key（D9）。
+const USES_PROXY = getLlmMode() === 'proxy';
 const ApplyInput = ({
   label,
   value,
@@ -205,14 +208,12 @@ const App = () => {
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(USES_PROXY);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const storageReadyRef = useRef(false);
 
   useEffect(() => {
-    const fromLocal = localStorage.getItem('GEMINI_API_KEY');
-    const fromEnv = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-    setHasApiKey(!!(fromLocal || fromEnv));
+    if (!USES_PROXY) setHasApiKey(!!localStorage.getItem('GEMINI_API_KEY'));
 
     const savedUsage = localStorage.getItem(LOCAL_STORAGE_KEY_USAGE);
     if (savedUsage) setUsage(JSON.parse(savedUsage));
@@ -336,7 +337,14 @@ const App = () => {
     const errorStr = JSON.stringify(e);
     const errorMsg = e.toString();
 
-    if (errorMsg.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED')) {
+    if (USES_PROXY && errorMsg.includes('Proxy ')) {
+      const quota = errorMsg.includes('RESOURCE_EXHAUSTED');
+      alert(
+        quota
+          ? `【额度耗尽】${type}触发了 Gemini 额度限制，请等待 1 分钟再试。`
+          : `【代理出错】${type}调用后端代理失败：\n\n${errorMsg}`,
+      );
+    } else if (errorMsg.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED')) {
       alert(
         `【额度耗尽】${type}触发了免费额度限制。\n\n建议：请等待 1 分钟再试，或点击右上角 Key 图标切换到一个"已开启结算"的项目 Key。`,
       );
@@ -663,13 +671,15 @@ const App = () => {
                   F:{usage.flash} P:{usage.pro}
                 </p>
               </div>
-              <button
-                onClick={handleSelectKey}
-                className={`p-1.5 rounded-full transition-all flex items-center justify-center ${hasApiKey ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/30 text-rose-200 animate-pulse'}`}
-                title={hasApiKey ? '已连接 API (点击更换)' : '未连接 API (点击设置)'}
-              >
-                {hasApiKey ? <Key size={16} /> : <AlertCircle size={16} />}
-              </button>
+              {!USES_PROXY && (
+                <button
+                  onClick={handleSelectKey}
+                  className={`p-1.5 rounded-full transition-all flex items-center justify-center ${hasApiKey ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/30 text-rose-200 animate-pulse'}`}
+                  title={hasApiKey ? '已连接 API (点击更换)' : '未连接 API (点击设置)'}
+                >
+                  {hasApiKey ? <Key size={16} /> : <AlertCircle size={16} />}
+                </button>
+              )}
               <button
                 onClick={() => openProfileModal()}
                 className="p-1.5 hover:bg-white/10 rounded-full transition-colors"
@@ -1215,12 +1225,14 @@ const App = () => {
                 >
                   <Upload size={16} /> 管理简历
                 </button>
-                <button
-                  onClick={handleSelectKey}
-                  className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-2 text-xs font-bold shadow-sm"
-                >
-                  <Key size={16} /> 刷新 API Key
-                </button>
+                {!USES_PROXY && (
+                  <button
+                    onClick={handleSelectKey}
+                    className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-2 text-xs font-bold shadow-sm"
+                  >
+                    <Key size={16} /> 刷新 API Key
+                  </button>
+                )}
                 <button
                   onClick={() => setShowProfileModal(false)}
                   className="p-2 hover:bg-slate-200 rounded-full transition-colors"

@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { Job, UserContext } from '../types';
 import { CHAT_SYSTEM_PROMPT } from '../constants';
 import type { BatchScreenMatchResult } from '../src/core/matchEngine';
@@ -9,16 +8,10 @@ import {
   buildResponseSchema,
   buildSystemPrompt,
 } from './matchPromptBuilder';
+import { generateContent } from './llmClient';
 
 const FLASH_MODEL_ID = 'gemini-3-flash-preview';
 const PRO_MODEL_ID = 'gemini-3-pro-preview';
-
-const getApiKey = (): string => {
-  const fromLocal = typeof window !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null;
-  const fromEnv = (import.meta as { env?: { VITE_GEMINI_API_KEY?: string } }).env
-    ?.VITE_GEMINI_API_KEY;
-  return fromLocal || fromEnv || '';
-};
 
 const safeParse = (text: string | undefined): unknown => {
   if (!text) return null;
@@ -37,9 +30,7 @@ export const batchScreenJobs = async (
   jobs: Job[],
   ctx: UserContext,
 ): Promise<BatchScreenJobResult[]> => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
-
-  const response = await ai.models.generateContent({
+  const response = await generateContent({
     model: FLASH_MODEL_ID,
     contents: buildBatchScreenContents(jobs),
     config: {
@@ -62,8 +53,7 @@ export const batchScreenJobs = async (
 };
 
 export const deepAuditJob = async (job: Job, ctx: UserContext) => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
-  const response = await ai.models.generateContent({
+  const response = await generateContent({
     model: PRO_MODEL_ID,
     contents: buildDeepAuditContents(job),
     config: {
@@ -85,16 +75,13 @@ export const deepAuditJob = async (job: Job, ctx: UserContext) => {
 };
 
 export const sendMessageToJobConsultant = async (job: Job, ctx: UserContext, message: string) => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
-  const chat = ai.chats.create({
+  // 每次都是新会话的单轮问答，等价于带 systemInstruction 的一次 generateContent。
+  const response = await generateContent({
     model: FLASH_MODEL_ID,
+    contents: `Context: ${job.content.substring(0, 2000)}\nUser: ${message}`,
     config: {
       systemInstruction: CHAT_SYSTEM_PROMPT(job.title, job.company, ctx),
     },
-  });
-
-  const response = await chat.sendMessage({
-    message: `Context: ${job.content.substring(0, 2000)}\nUser: ${message}`,
   });
   return response.text;
 };
