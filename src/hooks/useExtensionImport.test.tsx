@@ -114,4 +114,37 @@ describe('useExtensionImport', () => {
       results: [{ id: '9', verdict: 'pass' }],
     });
   });
+
+  it('answers copy kit requests with the handler items, passing the job through', async () => {
+    const posted: unknown[] = [];
+    vi.spyOn(window, 'postMessage').mockImplementation((message) => {
+      posted.push(message);
+    });
+    const items = [
+      { id: 'profile.email', group: 'profile' as const, label: 'Email', value: 'a@b.c' },
+    ];
+    const onCopyKit = vi.fn(() => items);
+    renderHook(() => useExtensionImport({ ready: true, onJobs: vi.fn(), onCopyKit }));
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            source: 'tianming-extension',
+            type: 'copy-kit-request',
+            requestId: 'c1',
+            job: { title: 'Analyst', company: 'Acme' },
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+    expect(onCopyKit).toHaveBeenCalledWith({ title: 'Analyst', company: 'Acme' });
+    expect(posted.at(-1)).toEqual({
+      source: 'tianming-app',
+      type: 'copy-kit-result',
+      requestId: 'c1',
+      items,
+    });
+  });
 });

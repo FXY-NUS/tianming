@@ -11,7 +11,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "天命 · 复制助手（在天命页面上点则打开天命）"
+    "default_title": "天命：在投递页点我打开复制助手"
   },
   "options_ui": {
     "page": "options.html",
