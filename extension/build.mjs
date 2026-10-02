@@ -10,18 +10,23 @@ const outdir = resolve(root, 'dist');
 rmSync(outdir, { recursive: true, force: true });
 mkdirSync(outdir, { recursive: true });
 
+const shared = { outdir, bundle: true, target: 'chrome120', sourcemap: false, logLevel: 'info' };
+
+// service worker 在 manifest 里声明了 type: module，用 ESM。
 await build({
+  ...shared,
+  entryPoints: { background: resolve(root, 'src/background.ts') },
+  format: 'esm',
+});
+
+// content script 只能是经典脚本，打成 IIFE，避免产物里出现 import/export 时整个脚本加载失败。
+await build({
+  ...shared,
   entryPoints: {
-    background: resolve(root, 'src/background.ts'),
     linkedin: resolve(root, 'src/content/linkedin.entry.ts'),
     appBridge: resolve(root, 'src/content/appBridge.ts'),
   },
-  outdir,
-  bundle: true,
-  format: 'esm',
-  target: 'chrome120',
-  sourcemap: false,
-  logLevel: 'info',
+  format: 'iife',
 });
 
 cpSync(resolve(root, 'manifest.json'), resolve(outdir, 'manifest.json'));

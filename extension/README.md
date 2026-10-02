@@ -32,4 +32,4 @@ Chrome → `chrome://extensions` → 打开「开发者模式」→「加载已�
 
 ## 接后端代理（Phase 6.4）
 
-`src/scoring.ts` 的 `getTriageScorer()` 换成调代理 `triage` 接口的实现即可，content script 和徽章不用动。徽章状态：`pass` / `maybe` / `reject` / `need_full_jd` / `unscored`。
+代理契约见 `doc/backend-proxy.md`（`POST /api/generate`，请求形状复用 `server/contract.ts`）。`src/scoring.ts` 的 `getTriageScorer()` 换成调代理的实现即可；LLM 只抽证据，分数仍由 MatchEngine 代码算（铁律 1），代理口令放 `chrome.storage`，不进扩展包，content script 和徽章不用动。徽章状态：`pass` / `maybe` / `reject` / `need_full_jd` / `unscored`。
