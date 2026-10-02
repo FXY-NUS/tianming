@@ -204,6 +204,19 @@ function hasAstrologyContext(ctx: UserContext): boolean {
   return ctx.personas.some((p) => p.type === 'ziwei' && ctx.activePersonaIds.includes(p.id));
 }
 
+/**
+ * 三类技能证据的口径（rubric-v1.2，见 doc/scoring-rubric.md）。评分引擎按它算分：
+ * transferable 每条按一项完整的 JD 要求进分母、只给半分，所以把 JD 没要求的简历技能
+ * 塞进 transferable 会把分数拉偏。初筛、深审、证据抽取三处提示词共用这一份。
+ */
+export const SKILL_BUCKET_RULES = `【技能证据三类的口径】：
+- 每一条都必须对应 JD 里的一项要求。
+- matchedSkills：简历直接具备这项要求；skill 尽量沿用简历里的写法，方便逐份简历核对。
+- missingSkills：简历里找不到这项要求；skill 写 JD 里的名称。
+- transferableSkills：简历只部分覆盖这项要求（相近技能或相关经历）；skill 写 JD 里的名称，evidence 写明是简历里哪项技能或经历沾边。
+- 同一项 JD 要求只放进其中一类，不要重复。
+- JD 没有要求的简历技能一律不列，哪怕看起来有用。`;
+
 export const FLASH_FILTER_PROMPT = (ctx: UserContext) => `
 你是一个极速筛选刽子手。
 【背景】: ${ctx.preferences.backgroundSummary || '（未填写）'}
@@ -213,6 +226,7 @@ export const FLASH_FILTER_PROMPT = (ctx: UserContext) => `
 2. 背景过滤：避开与背景明显不符的岗位。
 3. 重复检测：请对相似 JD 给出一致的低分或高分。
 输出 JSON 数组，包含 id、reason(10字内) 和 matchedSkills/missingSkills/transferableSkills/cultureSignals/growthReasons 等证据字段；不要输出最终总分。
+${SKILL_BUCKET_RULES}
 `;
 
 export const PRO_AUDIT_PROMPT = (ctx: UserContext) => {
@@ -289,11 +303,14 @@ ${auditDims}
 
 【约束补充】：
 - matchedSkills / missingSkills / transferableSkills 每条 skill 若能从简历材料定位来源，请输出 sourceResumeIds: string[]；用上方 resumeId，不要用简历 label 代替 id。
+- 三类技能的划分按下方【技能证据三类的口径】。
 - edits_suggestion 必须是具体可执行的 bullet（例如“加 X 到 Project Y” / “把 Skills 段第 3 条改为 Z”），不要写“建议加强经验”这种空话。
 - recommended_resume.reasoning 必须显式提到至少一个 skill / project 名称作为依据，不要写“该简历更符合岗位”这种泛泛之谈。${resumeConstraint}
 - 不输出 overall 数字 / judgment 字段。评分由代码计算，你只出 evidence + narrative + recommended_resume。
 
 【评分边界】：不要输出 score、overall 或最终 judgment。你只负责叙事与证据，最终分数和最终推荐等级由 Tianming 代码评分引擎生成。
+
+${SKILL_BUCKET_RULES}
 `;
 };
 

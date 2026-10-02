@@ -609,17 +609,47 @@ describe('buildMatchScore — Phase 4.5 resumeBreakdown integration', () => {
     expect(score.resumeBreakdown).toBeUndefined();
   });
 
-  it('bumped SCORING_VERSION and rubric for Phase 4.6 union weighting', () => {
-    expect(SCORING_VERSION).toBe('phase4-scoring-v2.0');
-    expect(DEFAULT_SCORING_RUBRIC.version).toBe('rubric-v1.1');
+  it('bumped SCORING_VERSION and rubric for the transferable-credit fix', () => {
+    expect(SCORING_VERSION).toBe('phase4-scoring-v2.1');
+    expect(DEFAULT_SCORING_RUBRIC.version).toBe('rubric-v1.2');
     const score = buildMatchScore({
       job: makeJob(),
       user: makeUser(),
       goal: 'audit',
       evidence,
     });
-    expect(score.scoringVersion).toBe('phase4-scoring-v2.0');
-    expect(score.rubricVersion).toBe('rubric-v1.1');
+    expect(score.scoringVersion).toBe('phase4-scoring-v2.1');
+    expect(score.rubricVersion).toBe('rubric-v1.2');
+  });
+
+  it('counts each transferable skill as a full requirement worth half credit', () => {
+    const user = makeUser({
+      resumes: [
+        makeResume('A', 'Active', { hard: ['X'] }),
+        makeResume('B', 'Alt', { hard: ['Y'] }),
+      ],
+      activeResumeId: 'A',
+    });
+
+    const score = buildMatchScore({
+      job: makeJob(),
+      user,
+      goal: 'audit',
+      evidence: {
+        matchedSkills: [{ skill: 'X', priority: 'unknown', sourceResumeIds: ['A'] }],
+        missingSkills: [],
+        // 只来自非激活简历也不再打折：沾边项对每份简历都按半分计。
+        transferableSkills: [{ skill: 'Y', priority: 'unknown', sourceResumeIds: ['B'] }],
+        cultureSignals: [],
+        growthReasons: [],
+      },
+    });
+
+    const skill = score.dimensions.find((dimension) => dimension.key === 'skill');
+    expect(skill?.score).toBe(75);
+    expect(skill?.warnings ?? []).not.toContain(
+      'Some matched skills only appear in non-active resumes and were discounted.',
+    );
   });
 
   it('discounts skill evidence that only comes from non-active resumes', () => {
