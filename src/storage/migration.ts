@@ -182,12 +182,14 @@ export async function migrateLocalStorageToIndexedDb(
 
   await targetDb.transaction(
     'rw',
-    targetDb.userContext,
-    targetDb.personas,
-    targetDb.resumes,
-    targetDb.jobs,
-    targetDb.feedbackRecords,
-    targetDb.meta,
+    [
+      targetDb.userContext,
+      targetDb.personas,
+      targetDb.resumes,
+      targetDb.jobs,
+      targetDb.feedbackRecords,
+      targetDb.meta,
+    ],
     async () => {
       await targetDb.personas.clear();
       await targetDb.resumes.clear();
