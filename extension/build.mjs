@@ -56,6 +56,7 @@ await build({
     linkedin: resolve(root, 'src/content/linkedin.entry.ts'),
     appBridge: resolve(root, 'src/content/appBridge.ts'),
     options: resolve(root, 'src/options/options.ts'),
+    copySidebar: resolve(root, 'src/content/copySidebar.entry.ts'),
   },
   format: 'iife',
 });
