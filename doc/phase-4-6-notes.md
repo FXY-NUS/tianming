@@ -127,21 +127,32 @@ recommended_resume: {
 
 **实测记录**（2026-10-02 · 代码侧自动化 `src/core/unionInflation.smoke.test.ts`，Gemini 证据用手写夹具代替，评分走真实引擎）：
 
+修复前（phase4-scoring-v2.0 / rubric-v1.1）：
+
 | 激活简历 | overall | skill 维度 | breakdown bestResumeId |
 |---|---|---|---|
-| A · ML 技术版 | 71.3 | 71.3 | C |
-| B · 咨询版 | 42.6 | 42.6 | C |
-| C · 什么都会版 | **78.7** | **78.7** | C |
+| A · ML 技术版 | 75.2 | 71.3 | C |
+| B · 咨询版 | 59.2 | 42.6 | C |
+| C · 什么都会版 | **79.3** | **78.7** | C |
 
 - ✅ A > B：成立，B 激活时 ML / Python / AWS 全部减半。
-- ❌ **C > A：命中反例，Q3 没能挡住。** 原因：×0.5 只打折"来自非激活简历"的 skill，C 本身就是所有 skill 的来源，激活 C 时没有一条被打折；transferable 里多出来的咨询 / marketing 关键词全额计入。
+- ❌ **C > A：命中反例，Q3 没能挡住。** 原因：transferable 分子分母都按半权，沾边项等于完整命中；×0.5 只打折"来自非激活简历"的 skill，C 本身就是所有 skill 的来源，激活 C 时没有一条被打折。
 - ❌ **breakdown 把 C 排第一**：`collectJdSkills` 把 transferable 也算成"JD 技能"，技能最多的简历必然 coverage 最高。
-- 两条失败预期以 `it.fails` 留在测试里，修复后改回 `it`。
 
-**候选修法（待拍板）**：
-1. 代码侧：transferable 对分子的贡献封顶（例如不超过 missing 权重的一半），且 breakdown 只按 matched + missing 算 JD 技能；bump scoringVersion / rubricVersion。
-2. prompt 侧：Pass B 明确 transferable 只能是"JD 要求但简历只沾边"的项，一条 JD 要求最多一条；跑 `/adversarial-prompt-review`。
-3. 两者都做（推荐：prompt 约束 Gemini 少塞，代码封顶兜底）。
+修复后（phase4-scoring-v2.1 / rubric-v1.2，2026-10-02 选定"代码 + 提示词"两边都改）：
+
+| 激活简历 | overall | skill 维度 | breakdown bestResumeId |
+|---|---|---|---|
+| A · ML 技术版 | 73.6 | 68.5 | A |
+| B · 咨询版 | 58.2 | 40.7 | A |
+| C · 什么都会版 | 73.6 | 68.5 | A |
+
+- ✅ C ≤ A：transferable 分母按完整需求计、分子固定半分、不按来源区分，沾边项对每份简历计分相同，堆得再多也拉不开差距（测试里额外塞 3 条只来自 C 的沾边词，C 仍不超过 A）。
+- ✅ breakdown 推荐 A：只数 matched + missing；A 和 C 覆盖数相同，按聚焦度（命中数 ÷ 简历技能总数）A 胜出，即使当前激活的是 C。
+- ✅ A > B 仍成立，B 激活时 matched 打折提示照常出现。
+- 关于上面"C 跟 A 完全等分"这条反例：它原本用来发现 Gemini 没标来源。夹具里来源是标了的（A > B 的差距和打折提示就是靠来源算出来的）；A、C 等分是因为 C 确实包含 A 的全部直接命中项，多出来的只是沾边词。"该投哪份"交给 breakdown，它推荐 A。
+- 提示词侧：初筛、深审、证据抽取三处共用 `constants.tsx` 的 `SKILL_BUCKET_RULES`，规定每条都对应一项 JD 要求、同一项只进一类、JD 没要求的简历技能不列。真实 Gemini 输出还没在本地跑过对比。
+- 两条 `it.fails` 已改回 `it`。
 
 ### 4.2 退化分支测试
 

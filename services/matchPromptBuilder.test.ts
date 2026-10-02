@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ResumeProfile, ResumeStructured, UserContext } from '../types';
-import { buildActiveResumeSection, buildResumeUnionSection } from '../constants';
+import {
+  SKILL_BUCKET_RULES,
+  buildActiveResumeSection,
+  buildResumeUnionSection,
+} from '../constants';
 import { buildResponseSchema, buildSystemPrompt } from './matchPromptBuilder';
 
 const ctx: UserContext = {
@@ -52,6 +56,13 @@ describe('matchPromptBuilder', () => {
     const prompt = buildSystemPrompt(ctx, 'triage');
 
     expect(prompt).toContain('Do not output or infer the final overall match score');
+  });
+
+  it('tells both triage and audit prompts how to sort skills into the three lists', () => {
+    for (const goal of ['triage', 'audit'] as const) {
+      expect(buildSystemPrompt(ctx, goal)).toContain(SKILL_BUCKET_RULES);
+    }
+    expect(SKILL_BUCKET_RULES).toContain('JD 没有要求的简历技能一律不列');
   });
 
   it('keeps audit schema free of LLM-owned final score and judgment fields', () => {

@@ -11,6 +11,7 @@ import {
   MAX_BODY_BYTES,
   MAX_THINKING_BUDGET,
   PROXY_CONTRACT_VERSION,
+  RATE_LIMIT_RETRY_AFTER_SECONDS,
   type GenerateConfig,
   type GenerateRequest,
   type GenerateResponse,
@@ -25,6 +26,13 @@ export interface ProxyEnv {
   ALLOWED_ORIGINS?: string;
   /** 可选共享口令；设置后请求必须带 Authorization: Bearer <token>。 */
   PROXY_TOKEN?: string;
+  /** Cloudflare Workers Rate Limiting 绑定（wrangler.jsonc 的 ratelimits）。没有绑定（本地 dev）就不限流。 */
+  RATE_LIMITER?: RateLimiter;
+}
+
+/** 与 Cloudflare 的 RateLimit 绑定同形，测试里可以直接塞假实现。 */
+export interface RateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
 }
 
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -73,6 +81,8 @@ export async function handleProxyRequest(
       throw new RequestError(405, 'METHOD_NOT_ALLOWED', 'Use POST');
     }
 
+    // 先限流再验口令：猜口令的请求同样计数。
+    await checkRateLimit(request, env.RATE_LIMITER);
     checkToken(request, env.PROXY_TOKEN);
 
     const apiKey = env.GEMINI_API_KEY;
@@ -85,7 +95,11 @@ export async function handleProxyRequest(
     return withCors(json(200, result), corsOrigin);
   } catch (err) {
     if (err instanceof RequestError) {
-      return withCors(errorResponse(err.status, err.code, err.message), corsOrigin);
+      const response = errorResponse(err.status, err.code, err.message);
+      if (err.code === 'RATE_LIMITED') {
+        response.headers.set('Retry-After', String(RATE_LIMIT_RETRY_AFTER_SECONDS));
+      }
+      return withCors(response, corsOrigin);
     }
     const message = err instanceof Error ? err.message : 'Unknown proxy error';
     return withCors(errorResponse(502, 'UPSTREAM_ERROR', message), corsOrigin);
@@ -116,6 +130,28 @@ function withCors(response: Response, corsOrigin: string | null | undefined): Re
     response.headers.append('Vary', 'Origin');
   }
   return response;
+}
+
+/**
+ * 按客户端 IP 计数（Cloudflare 填的 CF-Connecting-IP）。只用 IP 做 key，不读请求体，也不记日志。
+ * 限流服务本身出错时放行：宁可短暂不限流，也不让所有用户一起失败。
+ */
+async function checkRateLimit(request: Request, limiter: RateLimiter | undefined) {
+  if (!limiter) return;
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  let success = true;
+  try {
+    ({ success } = await limiter.limit({ key: `ip:${ip}` }));
+  } catch {
+    return;
+  }
+  if (!success) {
+    throw new RequestError(
+      429,
+      'RATE_LIMITED',
+      `Too many requests from this client. Retry in ${RATE_LIMIT_RETRY_AFTER_SECONDS} seconds.`,
+    );
+  }
 }
 
 function checkToken(request: Request, token: string | undefined) {

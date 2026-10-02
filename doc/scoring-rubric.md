@@ -53,9 +53,9 @@
 **Phase 4.6 起**：Pass B 证据池升级为**所有简历的 union**（skills + projects + education 维度做并集，experience 仍按 active resume）。每条 evidence 允许尾标 `（来源: <resume label>）`；`SkillEvidence.sourceResumeIds?: string[]` 字段同步。详见 HANDOFF §4 D12 + Phase 4.6 章节。
 
 输出：
-- `matchedSkills[]`
-- `missingSkills[]`
-- `transferableSkills[]`
+- `matchedSkills[]`：JD 要求、简历直接具备
+- `missingSkills[]`：JD 要求、简历里没有
+- `transferableSkills[]`：JD 要求、简历只部分覆盖（rubric-v1.2 起明确这个口径；JD 没要求的简历技能不列，同一项要求只进一类。提示词共用 `constants.tsx` 的 `SKILL_BUCKET_RULES`）
 - `cultureSignals[]`
 - `growthReasons[]`
 - 可选 `personaReasons[]`
@@ -99,6 +99,18 @@
 
 这些权重是工程默认值，不宣称具有统计学真值。后续可通过用户反馈做个性化学习。
 
+### skill 维度怎么算（rubric-v1.2 · phase4-scoring-v2.1）
+
+每条技能先按优先级取权重：must 1.25、preferred 0.75、unknown 1。
+
+- 分母：matched + transferable + missing 三类全部按完整权重计（每条 transferable 都是一项完整的 JD 要求）。
+- 分子：matched 计满分；transferable 固定计半分。
+- 多简历 union：matched 若只来自非激活简历，这一条打 ×0.5 并给出提示；transferable 不按来源区分，对每份简历都一样计半分。
+
+旧版（rubric-v1.1）transferable 分子分母都按半权，等于把沾边项当完整命中；再叠加"只打折非激活简历"，"什么都会"的简历激活后技能分 78.7，反超聚焦的 ML 简历 71.3。新版两者都是 68.5，聚焦简历不再吃亏。实测和夹具见 `src/core/unionInflation.smoke.test.ts`。
+
+简历适配对比（`computeResumeBreakdown`）只数 matched + missing 这两类 JD 直接要求；覆盖数平手时推荐更聚焦的简历（命中数 ÷ 简历技能总数更高），再平手才偏向当前激活简历。
+
 ---
 
 ## 4. 未来反馈闭环
@@ -136,7 +148,7 @@ Phase 4 只预留 `MatchFeedbackRecord`，不训练模型。
 
 **v1 rubric 阶段**（当前）：
 - `DEFAULT_SCORING_RUBRIC` 用工程经验权重，不宣称统计学真值。
-- 所有 `MatchScore` 写入 `rubricVersion: 'rubric-v1'` 和当前 `scoringVersion`。Phase 4.5 的 location / salary fallback 后为 `phase4-scoring-v1.1`。
+- 所有 `MatchScore` 写入当前 `rubricVersion` 和 `scoringVersion`。Phase 4.5 的 location / salary fallback 后为 `phase4-scoring-v1.1`；Phase 4.6 union 打折后为 `phase4-scoring-v2.0` / `rubric-v1.1`；transferable 半分修复后为 `phase4-scoring-v2.1` / `rubric-v1.2`（见 §3）。
 
 **Phase 8.x ML 阶段**（未实现）：
 - 用户在 UI 给 JD 打 1-5 星或做 `save / reject / apply / ignore` 行为，自动写入 `feedbackRecords`。

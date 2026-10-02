@@ -26,3 +26,7 @@ dist-ssr
 extension/dist
 test-results
 playwright-report
+
+# Cloudflare wrangler
+.wrangler
+.dev.vars*
