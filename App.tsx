@@ -50,8 +50,10 @@ import { PersonaSection } from './src/components/PersonaSection';
 import { ResumeMatchBreakdownCard } from './src/components/ResumeMatchBreakdownCard';
 import { ApplyAssistantPanel } from './src/components/ApplyAssistantPanel';
 import { PasteJobModal } from './src/components/PasteJobModal';
+import { useExtensionImport } from './src/hooks/useExtensionImport';
 import {
   jobFromPastedText,
+  jobsFromExtension,
   jobsFromImportPayload,
   type JobImportInput,
 } from './services/jobImport';
@@ -191,6 +193,7 @@ const App = () => {
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [showPasteJobModal, setShowPasteJobModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
 
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -232,6 +235,7 @@ const App = () => {
         setUserCtx(initialUserContext);
         setJobs(initialJobs);
         storageReadyRef.current = true;
+        setStorageReady(true);
 
         unsubscribers.push(
           subscribeUserContextFromIndexedDb((nextUserContext) => {
@@ -446,6 +450,11 @@ const App = () => {
     };
     reader.readAsText(file);
   };
+
+  useExtensionImport({
+    ready: storageReady,
+    onJobs: (captured) => persistJobs((prev) => [...jobsFromExtension(captured, prev), ...prev]),
+  });
 
   const handlePasteJob = (input: JobImportInput): string | null => {
     const result = jobFromPastedText(input, jobs);

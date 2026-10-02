@@ -1,4 +1,5 @@
 import type { Job } from '../types';
+import type { CapturedJob } from './extensionProtocol';
 
 /** 一条待导入的 JD：JSON 文件里的一项，或用户粘贴进来的文本。 */
 export interface JobImportInput {
@@ -114,4 +115,39 @@ export const jobFromPastedText = (
   const existing = existingJobs.find((candidate) => jobSignature(candidate) === signature);
   if (existing) return { kind: 'duplicate', existing };
   return { kind: 'created', job };
+};
+
+/**
+ * 浏览器扩展送来的岗位：走同一条 buildJobFromInput，按「标题-公司」和链接去重。
+ * 返回要新增的 Job；重复的直接略过（调用方照样 ack，让扩展出队）。
+ */
+export const jobsFromExtension = (
+  captured: CapturedJob[],
+  existingJobs: Pick<Job, 'title' | 'company' | 'url'>[],
+  now: Date = new Date(),
+): Job[] => {
+  const seenSignatures = new Set(existingJobs.map(jobSignature));
+  const seenUrls = new Set(existingJobs.map((job) => job.url.trim()).filter(Boolean));
+  const result: Job[] = [];
+  for (const item of captured) {
+    if (!item.content.trim()) continue;
+    const job = buildJobFromInput(
+      {
+        title: item.title,
+        company: item.company,
+        url: item.url,
+        content: item.content,
+        salaryText: item.salaryText,
+        locationText: item.locationText,
+        workMode: item.workMode,
+      },
+      now,
+    );
+    const signature = jobSignature(job);
+    if (seenSignatures.has(signature) || (job.url && seenUrls.has(job.url))) continue;
+    seenSignatures.add(signature);
+    if (job.url) seenUrls.add(job.url);
+    result.push(job);
+  }
+  return result;
 };

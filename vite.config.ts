@@ -23,7 +23,11 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
-      include: ['src/**/*.{test,spec}.{ts,tsx}', 'services/**/*.{test,spec}.{ts,tsx}'],
+      include: [
+        'src/**/*.{test,spec}.{ts,tsx}',
+        'services/**/*.{test,spec}.{ts,tsx}',
+        'extension/**/*.{test,spec}.{ts,tsx}',
+      ],
     },
   };
 });
