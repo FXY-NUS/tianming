@@ -1,7 +1,7 @@
 import { Type } from '@google/genai';
 import type { Job, UserContext } from '../types';
 import type { ExtractedEvidence, SkillEvidence } from '../src/core/matchTypes';
-import { buildResumeUnionSection } from '../constants';
+import { SKILL_BUCKET_RULES, buildResumeUnionSection } from '../constants';
 import { generateContent } from './llmClient';
 
 export type EvidenceExtractionErrorKind = 'gemini_error' | 'schema_violation' | 'empty_response';
@@ -20,6 +20,9 @@ Task:
 - Use "unknown" priority when a skill's priority is unclear.
 - When resume evidence supports a skill, include sourceResumeIds with resume ids from the resume context.
 - If the source cannot be determined, omit sourceResumeIds instead of guessing.
+- Sort skills into matchedSkills / missingSkills / transferableSkills by the rules below. Every entry is a JD requirement; never list resume skills the JD does not ask for.
+
+${SKILL_BUCKET_RULES}
 
 Return JSON only.
 `;

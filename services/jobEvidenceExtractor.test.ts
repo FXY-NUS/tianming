@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Job, ResumeStructured, UserContext } from '../types';
+import { SKILL_BUCKET_RULES } from '../constants';
 import { buildEvidencePrompt, extractJobEvidence, safeParseEvidence } from './jobEvidenceExtractor';
 
 const { mockGenerateContent } = vi.hoisted(() => ({ mockGenerateContent: vi.fn() }));
@@ -78,6 +79,17 @@ describe('jobEvidenceExtractor', () => {
       expect(result.data.matchedSkills[0].sourceResumeIds).toEqual(['resume-a']);
       expect(result.data.growthScore).toBe(82);
     }
+  });
+
+  it('sends the shared skill bucket rules as part of the system instruction', async () => {
+    mockGenerateContent.mockResolvedValue({ text: JSON.stringify(evidence) });
+
+    await extractJobEvidence(job, ctx);
+
+    const request = mockGenerateContent.mock.calls[0][0] as {
+      config: { systemInstruction: string };
+    };
+    expect(request.config.systemInstruction).toContain(SKILL_BUCKET_RULES);
   });
 
   it('strips markdown code fences from JSON before validation', () => {

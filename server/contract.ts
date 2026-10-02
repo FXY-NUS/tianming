@@ -25,6 +25,9 @@ export const ALLOWED_CONFIG_KEYS = [
 ] as const;
 
 export const MAX_THINKING_BUDGET = 32768;
+/** 代理限流（RATE_LIMITED）时 Retry-After 的秒数，与 wrangler.jsonc 里 ratelimits 的 period 一致。 */
+export const RATE_LIMIT_RETRY_AFTER_SECONDS = 60;
+
 /** 简历 PDF/图片走 base64 inlineData，留足余量。 */
 export const MAX_BODY_BYTES = 20 * 1024 * 1024;
 
@@ -66,6 +69,7 @@ export type ProxyErrorCode =
   | 'NOT_FOUND'
   | 'METHOD_NOT_ALLOWED'
   | 'RESOURCE_EXHAUSTED'
+  | 'RATE_LIMITED'
   | 'UPSTREAM_ERROR'
   | 'SERVER_MISCONFIGURED';
 
