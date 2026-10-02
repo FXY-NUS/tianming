@@ -31,6 +31,7 @@ import {
   Key,
   RefreshCcw,
   Plus,
+  ClipboardPaste,
 } from 'lucide-react';
 import { ApplyProfile, Job, SavedAnswer, UserContext, UserPreferences } from './types';
 import {
@@ -48,6 +49,12 @@ import { ResumeModal } from './src/components/ResumeModal';
 import { PersonaSection } from './src/components/PersonaSection';
 import { ResumeMatchBreakdownCard } from './src/components/ResumeMatchBreakdownCard';
 import { ApplyAssistantPanel } from './src/components/ApplyAssistantPanel';
+import { PasteJobModal } from './src/components/PasteJobModal';
+import {
+  jobFromPastedText,
+  jobsFromImportPayload,
+  type JobImportInput,
+} from './services/jobImport';
 import { migrateLocalStorageToIndexedDb } from './src/storage/migration';
 import {
   loadJobsFromIndexedDb,
@@ -182,6 +189,7 @@ const App = () => {
   const [userCtx, setUserCtx] = useState<UserContext>(DEFAULT_USER_CONTEXT);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
+  const [showPasteJobModal, setShowPasteJobModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   const [filter, setFilter] = useState('');
@@ -428,39 +436,7 @@ const App = () => {
     reader.onload = async (event) => {
       try {
         const raw = JSON.parse(event.target.result as string);
-        const existingSignatures = new Set(
-          jobs.map((j) => `${j.title.trim()}-${j.company.trim()}`),
-        );
-        const newJobsData: Job[] = [];
-        raw.forEach((item: any) => {
-          const content = item.scraped_content || item.content || '';
-          const salaryText = item.salaryText || item.salary_text || '';
-          const title = (
-            item.title?.trim() ||
-            content.split('\n')[0].substring(0, 50).trim() ||
-            '待析职位'
-          ).trim();
-          const company = (item.company?.trim() || '未知公司').trim();
-          const signature = `${title}-${company}`;
-          if (!existingSignatures.has(signature)) {
-            newJobsData.push({
-              id: item.id || Math.random().toString(36).substr(2, 9),
-              title,
-              company,
-              url: item.url || '',
-              content,
-              salary_text: salaryText || '面议',
-              salaryText,
-              locationText: item.locationText || item.location_text || item.location || '',
-              workMode: item.workMode || item.work_mode || item.mode || '',
-              status: 'New',
-              tags: [],
-              chatHistory: [],
-              importedAt: new Date().toISOString(),
-            });
-            existingSignatures.add(signature);
-          }
-        });
+        const newJobsData = jobsFromImportPayload(raw, jobs);
         persistJobs((prev) => [...newJobsData, ...prev]);
       } catch (err) {
         alert('导入失败');
@@ -469,6 +445,18 @@ const App = () => {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handlePasteJob = (input: JobImportInput): string | null => {
+    const result = jobFromPastedText(input, jobs);
+    if (result.kind === 'empty') return '先粘贴 JD 正文';
+    const job = result.kind === 'created' ? result.job : result.existing;
+    if (result.kind === 'created') persistJobs((prev) => [job, ...prev]);
+    setStatusFilter('All');
+    setFilter('');
+    setSelectedJob(job);
+    setShowPasteJobModal(false);
+    return null;
   };
 
   const updateJobData = (jobId: string, updates: Partial<Job>) => {
@@ -735,6 +723,12 @@ const App = () => {
               <Upload size={12} /> 导入 JSON
               <input type="file" className="hidden" accept=".json" onChange={handleFileUpload} />
             </label>
+            <button
+              onClick={() => setShowPasteJobModal(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-[10px] font-bold hover:bg-indigo-100"
+            >
+              <ClipboardPaste size={12} /> 粘贴 JD
+            </button>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -1530,6 +1524,10 @@ const App = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showPasteJobModal && (
+        <PasteJobModal onClose={() => setShowPasteJobModal(false)} onSubmit={handlePasteJob} />
       )}
 
       {/* Resume Modal */}
