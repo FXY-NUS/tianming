@@ -100,7 +100,7 @@ Layer 3 · 投递助手（Apply Assistant）
 git clone https://github.com/FXY-NUS/tianming.git
 cd tianming
 npm install
-cp .env.example .env.local   # 填入 VITE_GEMINI_API_KEY
+cp .env.example .env.local   # 填入 GEMINI_API_KEY（服务端变量，由内置 /api 代理读取，不进前端）
 npm run dev
 ```
 
