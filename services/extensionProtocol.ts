@@ -27,8 +27,17 @@ export interface CapturedJob {
   capturedAt: string;
 }
 
-/** 卡片徽章档位。unscored = 没评上（天命页面没开、评分失败等）。 */
-export type TriageVerdict = 'pass' | 'maybe' | 'reject' | 'need_full_jd' | 'unscored';
+/**
+ * 卡片徽章档位。unscored = 没评上（天命页面没开、评分失败等）；
+ * retry_later = 被限流（代理 429），扩展过一会儿自动补评一次。
+ */
+export type TriageVerdict =
+  | 'pass'
+  | 'maybe'
+  | 'reject'
+  | 'need_full_jd'
+  | 'unscored'
+  | 'retry_later';
 
 export interface TriageResult {
   id: string;
@@ -42,6 +51,7 @@ const TRIAGE_VERDICTS: readonly TriageVerdict[] = [
   'reject',
   'need_full_jd',
   'unscored',
+  'retry_later',
 ];
 
 /** 一次最多送这么多张卡片去评分，和天命「批量初筛」的 30 份上限对齐。 */

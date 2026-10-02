@@ -51,6 +51,17 @@ export const verdictForMatch = (matchScore: MatchScore): TriageVerdict => {
 const unscored = (cards: JobCardSnapshot[], reason: string): TriageResult[] =>
   cards.map((card) => ({ id: card.id, verdict: 'unscored', reason }));
 
+export const RATE_LIMITED_REASON = '请求太频繁，稍后自动补评';
+
+/** 代理限流（429）或 Gemini 配额用尽：llmClient 抛出的错误信息里带状态码或错误码。 */
+export const isRateLimitError = (error: unknown) =>
+  /\b429\b|RESOURCE_EXHAUSTED|RATE_LIMIT/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
+
+const retryLater = (cards: JobCardSnapshot[]): TriageResult[] =>
+  cards.map((card) => ({ id: card.id, verdict: 'retry_later', reason: RATE_LIMITED_REASON }));
+
 export const triageCards = async (
   cards: JobCardSnapshot[],
   ctx: UserContext,
@@ -64,7 +75,8 @@ export const triageCards = async (
       cards.map((card) => cardToJob(card, now)),
       ctx,
     );
-  } catch {
+  } catch (error) {
+    if (isRateLimitError(error)) return retryLater(cards);
     return unscored(cards, '评分请求失败，刷新 LinkedIn 页面可重试');
   }
   const byId = new Map(screened.map((result) => [String(result.id), result]));
@@ -79,21 +91,29 @@ export const triageCards = async (
   });
 };
 
+/** 被限流后这段时间内不再调 LLM，直接回 retry_later，避免连环撞 429。 */
+export const RATE_LIMIT_COOLDOWN_MS = 60_000;
+
 /**
  * 同一张卡片一个会话里只评一次：LinkedIn 换页回来、节点复用时扩展会再问，命中缓存就不再调 LLM。
- * 没评上的（unscored）不缓存，下次还会重试。
+ * 没评上的（unscored / retry_later）不缓存，下次还会重试。
  */
 export const createCachedTriage = (
   triage: (cards: JobCardSnapshot[], ctx: UserContext) => Promise<TriageResult[]>,
+  now: () => number = Date.now,
 ) => {
   const cache = new Map<string, TriageResult>();
+  let cooldownUntil = 0;
   return async (cards: JobCardSnapshot[], ctx: UserContext): Promise<TriageResult[]> => {
     const missing = cards.filter((card) => !cache.has(card.id));
     const latest = new Map<string, TriageResult>();
-    if (missing.length) {
+    if (missing.length && now() < cooldownUntil) {
+      for (const result of retryLater(missing)) latest.set(result.id, result);
+    } else if (missing.length) {
       for (const result of await triage(missing, ctx)) {
         latest.set(result.id, result);
-        if (result.verdict !== 'unscored') cache.set(result.id, result);
+        if (result.verdict === 'retry_later') cooldownUntil = now() + RATE_LIMIT_COOLDOWN_MS;
+        else if (result.verdict !== 'unscored') cache.set(result.id, result);
       }
     }
     return cards.map(

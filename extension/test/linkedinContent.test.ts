@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BADGE_CLASS } from '../src/badge';
-import { CAPTURE_BUTTON_ID, startLinkedInContent } from '../src/content/linkedinContent';
+import {
+  CAPTURE_BUTTON_ID,
+  MAX_TRIAGE_RETRIES,
+  startLinkedInContent,
+} from '../src/content/linkedinContent';
 import type { RuntimeRequest } from '../src/messages';
 
 const SEARCH_URL = 'https://www.linkedin.com/jobs/search/?currentJobId=4001';
@@ -75,6 +79,47 @@ describe('startLinkedInContent · cards', () => {
     });
     await controller.flushTriage();
     expect(badges().map((b) => b.state)).toEqual(['unscored', 'unscored']);
+    controller.stop();
+  });
+
+  it('rate-limited cards show retry-later and get one batched retry after the delay', async () => {
+    let calls = 0;
+    const send = vi.fn(async (message: RuntimeRequest) => {
+      if (message.type !== 'triage') return { ok: true };
+      calls += 1;
+      return {
+        results: message.cards.map((card) => ({
+          id: card.id,
+          verdict: calls === 1 ? 'retry_later' : 'pass',
+        })),
+      };
+    });
+    const { controller } = start({ send, retryDelayMs: 20 });
+    await controller.flushTriage();
+    expect(badges().map((b) => b.state)).toEqual(['retry_later', 'retry_later']);
+    expect(calls).toBe(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(calls).toBe(2);
+    expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ type: 'triage' });
+    expect(badges().map((b) => b.state)).toEqual(['pass', 'pass']);
+    controller.stop();
+  });
+
+  it('stops retrying a card after MAX_TRIAGE_RETRIES rate-limited attempts', async () => {
+    let calls = 0;
+    const send = vi.fn(async (message: RuntimeRequest) => {
+      if (message.type !== 'triage') return { ok: true };
+      calls += 1;
+      return {
+        results: message.cards.map((card) => ({ id: card.id, verdict: 'retry_later' })),
+      };
+    });
+    const { controller } = start({ send, retryDelayMs: 5 });
+    await controller.flushTriage();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(calls).toBe(1 + MAX_TRIAGE_RETRIES);
+    expect(badges().map((b) => b.state)).toEqual(['retry_later', 'retry_later']);
     controller.stop();
   });
 

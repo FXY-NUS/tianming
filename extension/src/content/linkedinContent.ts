@@ -28,7 +28,13 @@ export interface LinkedInContentDeps {
   /** DOM 变化后重新扫描的防抖间隔；测试里设 0。 */
   rescanDelayMs?: number;
   triageBatchDelayMs?: number;
+  /** 被限流（retry_later）后隔多久补评一次。 */
+  retryDelayMs?: number;
 }
+
+/** 每张卡片被限流后最多补评几次，之后停在「稍后重试」，等刷新页面。 */
+export const MAX_TRIAGE_RETRIES = 3;
+export const TRIAGE_RETRY_DELAY_MS = 65_000;
 
 export const CAPTURE_BUTTON_ID = 'tianming-capture';
 const PROCESSED_ATTR = 'data-tianming-job-id';
@@ -49,11 +55,32 @@ export const startLinkedInContent = (deps: LinkedInContentDeps) => {
   const now = deps.now ?? (() => new Date());
   const rescanDelay = deps.rescanDelayMs ?? 250;
   const triageDelay = deps.triageBatchDelayMs ?? 300;
+  const retryDelay = deps.retryDelayMs ?? TRIAGE_RETRY_DELAY_MS;
 
   const cardsById = new Map<string, HTMLElement>();
   let pendingTriage: JobCardSnapshot[] = [];
   let triageTimer: ReturnType<typeof setTimeout> | null = null;
   let rescanTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryQueue: JobCardSnapshot[] = [];
+  const retryCounts = new Map<string, number>();
+
+  /** 限流的卡片攒起来，一个计时器到点后合成一批补评；不逐张重试，也不连环重试。 */
+  const scheduleRetry = (snapshots: JobCardSnapshot[]) => {
+    for (const snapshot of snapshots) {
+      const count = (retryCounts.get(snapshot.id) ?? 0) + 1;
+      if (count > MAX_TRIAGE_RETRIES) continue;
+      retryCounts.set(snapshot.id, count);
+      if (!retryQueue.some((queued) => queued.id === snapshot.id)) retryQueue.push(snapshot);
+    }
+    if (retryTimer || !retryQueue.length) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      pendingTriage.push(...retryQueue);
+      retryQueue = [];
+      void flushTriage();
+    }, retryDelay);
+  };
 
   const flushTriage = async () => {
     triageTimer = null;
@@ -63,10 +90,14 @@ export const startLinkedInContent = (deps: LinkedInContentDeps) => {
     try {
       const response = await send({ type: 'triage', cards: batch });
       if (!isTriageResponse(response)) throw new Error('bad triage response');
+      const toRetry: JobCardSnapshot[] = [];
       for (const result of response.results) {
         const card = cardsById.get(result.id);
         if (card) renderBadge(card, result.verdict, result.reason);
+        const snapshot = batch.find((item) => item.id === result.id);
+        if (result.verdict === 'retry_later' && snapshot) toRetry.push(snapshot);
       }
+      scheduleRetry(toRetry);
     } catch {
       for (const snapshot of batch) {
         const card = cardsById.get(snapshot.id);
@@ -202,6 +233,7 @@ export const startLinkedInContent = (deps: LinkedInContentDeps) => {
       intersectionObserver?.disconnect();
       if (triageTimer) clearTimeout(triageTimer);
       if (rescanTimer) clearTimeout(rescanTimer);
+      if (retryTimer) clearTimeout(retryTimer);
     },
   };
 };

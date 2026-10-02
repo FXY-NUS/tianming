@@ -3,7 +3,13 @@ import type { Job, UserContext } from '../types';
 import type { JobCardSnapshot, MatchLabel, MatchScore } from '../src/core/matchTypes';
 import type { BatchScreenJobResult } from './geminiService';
 import { DEFAULT_USER_CONTEXT } from './userContextStorage';
-import { createCachedTriage, triageCards, verdictForMatch } from './extensionTriage';
+import {
+  RATE_LIMIT_COOLDOWN_MS,
+  createCachedTriage,
+  isRateLimitError,
+  triageCards,
+  verdictForMatch,
+} from './extensionTriage';
 
 const card = (id: string, title = `Engineer ${id}`): JobCardSnapshot => ({
   id,
@@ -54,7 +60,7 @@ describe('triageCards', () => {
     expect(partial.map((r) => r.verdict)).toEqual(['unscored', 'maybe']);
 
     const failed = await triageCards([card('1')], DEFAULT_USER_CONTEXT, async () => {
-      throw new Error('429');
+      throw new Error('Proxy 502 UPSTREAM_ERROR: boom');
     });
     expect(failed[0].verdict).toBe('unscored');
   });
@@ -80,5 +86,44 @@ describe('createCachedTriage', () => {
       ['2', 'unscored'],
       ['3', 'pass'],
     ]);
+  });
+});
+
+describe('rate limiting (proxy 429)', () => {
+  it('429 from the proxy becomes retry_later, other errors stay unscored', async () => {
+    expect(isRateLimitError(new Error('Proxy 429 RATE_LIMITED: too many requests'))).toBe(true);
+    expect(isRateLimitError(new Error('Proxy 429 RESOURCE_EXHAUSTED: quota'))).toBe(true);
+    expect(isRateLimitError(new Error('Proxy 502 UPSTREAM_ERROR: boom'))).toBe(false);
+
+    const limited = await triageCards([card('1')], DEFAULT_USER_CONTEXT, async () => {
+      throw new Error('Proxy 429 RATE_LIMITED: too many requests');
+    });
+    expect(limited).toEqual([
+      { id: '1', verdict: 'retry_later', reason: expect.stringContaining('稍后') },
+    ]);
+  });
+
+  it('after a 429, holds off LLM calls for the cooldown, then scores again', async () => {
+    let clock = 0;
+    let limited = true;
+    const triage = vi.fn(async (cards: JobCardSnapshot[]) =>
+      cards.map((c) => ({
+        id: c.id,
+        verdict: limited ? ('retry_later' as const) : ('pass' as const),
+      })),
+    );
+    const cached = createCachedTriage(triage, () => clock);
+
+    expect((await cached([card('1')], DEFAULT_USER_CONTEXT))[0].verdict).toBe('retry_later');
+    clock += RATE_LIMIT_COOLDOWN_MS - 1;
+    expect(
+      (await cached([card('1'), card('2')], DEFAULT_USER_CONTEXT)).map((r) => r.verdict),
+    ).toEqual(['retry_later', 'retry_later']);
+    expect(triage).toHaveBeenCalledTimes(1);
+
+    limited = false;
+    clock += 1;
+    expect((await cached([card('1')], DEFAULT_USER_CONTEXT))[0].verdict).toBe('pass');
+    expect(triage).toHaveBeenCalledTimes(2);
   });
 });

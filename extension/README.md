@@ -52,6 +52,7 @@ TIANMING_APP_URL=https://你的天命网址 npm run build:extension   # 换默�
 
 扩展自己不调 Gemini，也拿不到简历和画像（D5 / D6）。卡片快照经 `appBridge` 交给**打开着的天命页面**：Web App 用自己的画像走现有批量初筛（Flash 抽证据 → `scoreBatchScreenRecord` 代码算分，goal = `triage`），只把档位和一句理由回给扩展，画像和分数明细不出 Web App。评分逻辑和提示词一个字没改，见 `services/extensionTriage.ts`。
 
-- 徽章：`pass`（合适）/ `maybe`（可看看）/ `reject`（不太合适）/ `need_full_jd`（信息不够，点开看全文）/ `unscored`（没评上）。鼠标悬停看分数和理由。
+- 徽章：`pass`（合适）/ `maybe`（可看看）/ `reject`（不太合适）/ `need_full_jd`（信息不够，点开看全文）/ `unscored`（没评上）/ `retry_later`（被限流，稍后重试）。鼠标悬停看分数和理由。
+- 部署后的代理有限流（超了返回 429）：被限流的卡片显示「稍后重试」，天命页面 1 分钟内不再调 LLM，扩展约 65 秒后把这些卡片合成一批补评一次，每张卡最多补评 3 次。
 - 天命页面没打开时一律「未评分」，扩展不会替你开标签页；打开天命后刷新 LinkedIn 页面即可评分。
 - 每批最多 30 张卡片；同一会话里每张卡片只评一次（Flash 调用计入天命页面的用量统计）。
