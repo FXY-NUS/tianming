@@ -26,6 +26,8 @@ TIANMING_APP_URL=https://你的天命网址 npm run build:extension   # 换默�
 
 改完代码重新 build，再在扩展页点刷新。本地天命 Web App 用 `npm run dev`，跑在 `http://localhost:3000`。
 
+端到端测试：`npm run test:e2e`。会先构建扩展，再用 Playwright 起真 Chromium 加载 `extension/dist/`、起天命 dev server；LinkedIn 页面由 `extension/test/fixtures/` 里保存的片段路由出来，`/api/generate` 用桩，不访问真网站也不调 Gemini。覆盖：徽章出现、打分回填、「送进天命」入列且不重复、限流显示「稍后重试」。CI 里单独一个 job 跑。
+
 ## 使用
 
 1. 先打开天命页面，再打开 LinkedIn 岗位搜索页，滚动时视口里的卡片右上角出现「天命 · …」徽章。天命页面没开时显示「未评分」。
