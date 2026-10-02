@@ -47,11 +47,11 @@
 
 | 层 | 选型 |
 |---|---|
-| 框架 | React 18 + TypeScript + Vite |
+| 框架 | React 19 + TypeScript + Vite |
 | LLM SDK | `@google/genai` (Gemini 3 Flash + Pro) |
 | 样式 | Tailwind CSS（Phase 1 引入）|
 | 表单 | react-hook-form + Zod（Phase 1 引入）|
-| 本地存储 | localStorage（当前）→ Dexie/IndexedDB（Phase 5 迁移）|
+| 本地存储 | Dexie/IndexedDB（Phase 5 已从 localStorage 迁移）|
 | 状态管理 | useState（保持，不引入 Redux/Zustand）|
 
 ## 四、Phase 路线图（V8 重构）

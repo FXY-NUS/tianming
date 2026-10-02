@@ -3,6 +3,7 @@ import type { Job } from '../types';
 import {
   buildJobFromInput,
   jobFromPastedText,
+  jobsFromExtension,
   jobsFromImportPayload,
   normalizeImportItem,
 } from './jobImport';
@@ -118,5 +119,48 @@ describe('jobFromPastedText', () => {
       NOW,
     );
     expect(result).toEqual({ kind: 'duplicate', existing });
+  });
+});
+
+describe('jobsFromExtension', () => {
+  const captured = (externalId: string, title: string, company: string, content = 'body') => ({
+    externalId,
+    source: 'linkedin' as const,
+    title,
+    company,
+    url: `https://www.linkedin.com/jobs/view/${externalId}/`,
+    content,
+    locationText: 'Singapore',
+    salaryText: '$5K/month',
+    workMode: 'Hybrid',
+    capturedAt: NOW.toISOString(),
+  });
+
+  it('builds jobs through the shared path and dedupes by signature and url', () => {
+    const existing = [
+      existingJob('Data Analyst', 'Acme'),
+      { ...existingJob('Other', 'Co'), url: 'https://www.linkedin.com/jobs/view/9/' },
+    ];
+    const jobs = jobsFromExtension(
+      [
+        captured('1', 'Data Analyst', 'Acme'),
+        captured('9', 'Renamed Title', 'Co'),
+        captured('2', 'PM Intern', 'Beta'),
+        captured('2', 'PM Intern', 'Beta'),
+        captured('3', 'Empty', 'Beta', '   '),
+      ],
+      existing,
+      NOW,
+    );
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      title: 'PM Intern',
+      company: 'Beta',
+      url: 'https://www.linkedin.com/jobs/view/2/',
+      salary_text: '$5K/month',
+      locationText: 'Singapore',
+      workMode: 'Hybrid',
+      importedAt: NOW.toISOString(),
+    });
   });
 });

@@ -42,6 +42,12 @@
 - 接口契约 v1 与扩展对接要点见 `doc/backend-proxy.md` §2；扩展线程按它对接。
 - 下一步：补 `wrangler.toml` 并真部署一次 Worker；上线前加限流（见 `doc/backend-proxy.md` §5）。
 
+## M2 · 浏览器扩展（并行推进中）
+
+- `extension/`：LinkedIn MV3 扩展骨架 + 卡片徽章 + 详情「送进天命」按钮（Phase 6.1–6.3），分支 `feat/linkedin-extension-foi2or`。
+- 粗筛评分只留了 `extension/src/scoring.ts` 一个适配层，徽章暂时一律「未评分」。代理已合入，但 `scoreBatchScreenRecord` 要用户画像（在 Web App 的 IndexedDB 里），下一步让卡片经 bridge 交给打开着的天命页面打分，见 `extension/README.md`。
+- 用法和结构见 `extension/README.md`。
+
 ## 代理部署准备（并行线程 · 2026-10-02）
 
 - `wrangler.jsonc`：一个 Worker 托管网页 `dist/` 和 `/api/*`（同源）；按 IP 限流 20 次 / 分钟，超限 429 `RATE_LIMITED`。

@@ -10,10 +10,12 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       '.wrangler/**',
+      'extension/dist/**',
       'node_modules/**',
       'coverage/**',
       '*.config.js',
       '*.config.ts',
+      'extension/build.mjs',
     ],
   },
   js.configs.recommended,
