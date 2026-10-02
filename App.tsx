@@ -339,10 +339,13 @@ const App = () => {
 
     if (USES_PROXY && errorMsg.includes('Proxy ')) {
       const quota = errorMsg.includes('RESOURCE_EXHAUSTED');
+      const throttled = errorMsg.includes('RATE_LIMITED');
       alert(
         quota
           ? `【额度耗尽】${type}触发了 Gemini 额度限制，请等待 1 分钟再试。`
-          : `【代理出错】${type}调用后端代理失败：\n\n${errorMsg}`,
+          : throttled
+            ? `【请求太频繁】${type}超出了代理的每分钟次数上限，请等待 1 分钟再试。`
+            : `【代理出错】${type}调用后端代理失败：\n\n${errorMsg}`,
       );
     } else if (errorMsg.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED')) {
       alert(
