@@ -1,4 +1,4 @@
-# 天命浏览器扩展（Phase 6.1–6.3）
+# 天命浏览器扩展（Phase 6.1–6.3 · 6.5）
 
 LinkedIn 岗位列表 → 天命的单向搬运工。只读用户正在看的页面：已加载的卡片打徽章，用户点开的详情一键送进天命。不翻页、不请求详情页、不后台抓取（HANDOFF D4'）；扩展里没有 API Key，也不调 Gemini（D5）。
 
@@ -26,6 +26,8 @@ TIANMING_APP_URL=https://你的天命网址 npm run build:extension   # 换默�
 
 改完代码重新 build，再在扩展页点刷新。本地天命 Web App 用 `npm run dev`，跑在 `http://localhost:3000`。
 
+端到端测试：`npm run test:e2e`。会先构建扩展，再用 Playwright 起真 Chromium 加载 `extension/dist/`、起天命 dev server；LinkedIn 页面由 `extension/test/fixtures/` 里保存的片段路由出来，`/api/generate` 用桩，不访问真网站也不调 Gemini。覆盖：徽章出现、打分回填、「送进天命」入列且不重复、限流显示「稍后重试」。CI 里单独一个 job 跑。
+
 ## 使用
 
 1. 先打开天命页面，再打开 LinkedIn 岗位搜索页，滚动时视口里的卡片右上角出现「天命 · …」徽章。天命页面没开时显示「未评分」。
@@ -45,6 +47,8 @@ TIANMING_APP_URL=https://你的天命网址 npm run build:extension   # 换默�
 | `src/options/` | 扩展设置页（填天命网址） |
 | `src/scoring.ts` | 粗筛评分适配层：把卡片交给天命标签页，没开就「未评分」 |
 | `src/triageRelay.ts` | bridge 里按 requestId 中转粗筛请求和结果 |
+| `src/content/copySidebar.ts` | 投递页复制侧栏（点扩展图标时注入） |
+| `src/copyKitFetch.ts` / `src/copyKitRelay.ts` | 侧栏要内容：service worker 转给天命标签页 / bridge 里按 requestId 中转 |
 | `../services/extensionProtocol.ts` | 扩展与 Web App 共用的消息格式 |
 | `test/` | 用保存下来的 LinkedIn 页面片段做的测试（`npm test` 一起跑） |
 
@@ -56,3 +60,21 @@ TIANMING_APP_URL=https://你的天命网址 npm run build:extension   # 换默�
 - 部署后的代理有限流（超了返回 429）：被限流的卡片显示「稍后重试」，天命页面 1 分钟内不再调 LLM，扩展约 65 秒后把这些卡片合成一批补评一次，每张卡最多补评 3 次。
 - 天命页面没打开时一律「未评分」，扩展不会替你开标签页；打开天命后刷新 LinkedIn 页面即可评分。
 - 每批最多 30 张卡片；同一会话里每张卡片只评一次（Flash 调用计入天命页面的用量统计）。
+
+## 投递页复制侧栏（Phase 6.5 · D11 L3）
+
+在任意投递页（Greenhouse、Workday、公司官网、LinkedIn Easy Apply……）点浏览器右上角的天命扩展图标，页面右侧出现「天命 · 复制助手」侧栏，列出可以直接复制的内容，每条一个「复制」按钮，复制后自己粘贴到表单里：
+
+- **投递档案**：天命「档案 → 投递助手」里填的姓名、邮箱、电话、链接、工签、起始日期等。
+- **简历要点**：当前简历的简介、技能、语言、最近 3 段教育 / 经历 / 项目。
+- **已存回答**：投递助手里存的常用回答。
+- **邮件正文**：只在 LinkedIn 岗位详情页上有（能认出岗位名和公司时），和天命里的邮件模式同一个模板。
+
+规则：
+
+- 只复制，不碰页面上的表单，不自动提交（D11：L4 autofill / L5 自动提交永久不做）。侧栏底部写着「天命不替你提交。所有投递都是你自己手动点的。」
+- 内容每次打开侧栏时向**打开着的天命页面**要，只放在侧栏内存里；点「关闭」就丢掉，不写进 `chrome.storage`（D6）。天命页面没开时侧栏提示先打开，有「打开天命」按钮。改了档案后点侧栏的「刷新」。
+- 侧栏放在 closed shadow root 里，投递页的样式和脚本碰不到它的内容。
+- 权限：用 `activeTab`，只有用户点图标的那一页会被注入，不申请「所有网站」权限。
+- 「收起」变成右边缘的小标签，点它展开；再点一次扩展图标等于关闭。在天命页面本身、`chrome://` 页面上点图标仍是打开天命。
+

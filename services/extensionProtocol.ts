@@ -8,6 +8,11 @@
  * 卡片粗筛：扩展把卡片快照经 bridge 交给打开着的天命页面（triage-request），App 用自己的
  * 用户画像走现有初筛（LLM 抽证据、代码算分），只把档位和一句理由回给扩展（triage-result）。
  * 画像和分数明细都不出 Web App。
+ *
+ * 投递页复制侧栏（Phase 6.5 / D11 L3）：用户在投递页点开侧栏时，扩展经 bridge 向打开着的
+ * 天命页面要一份「可复制内容」（copy-kit-request），App 用投递档案、已存回答和当前简历拼好
+ * 回给扩展（copy-kit-result）。内容只在侧栏打开期间留在内存里，不进 chrome.storage（D6）；
+ * 扩展只负责「点按钮复制」，粘贴和提交都由用户自己做（D11：不 autofill、不自动提交）。
  */
 
 import type { JobCardSnapshot } from '../src/core/matchTypes';
@@ -75,7 +80,42 @@ export interface ExtensionTriageRequestMessage {
   cards: JobCardSnapshot[];
 }
 
-export type ExtensionMessage = ExtensionJobsMessage | ExtensionTriageRequestMessage;
+/** 侧栏所在投递页对应的岗位（能认出来时才有），App 用它拼邮件正文。 */
+export interface CopyKitJob {
+  title: string;
+  company: string;
+}
+
+/** bridge → App：侧栏打开了，请给一份可复制内容。 */
+export interface ExtensionCopyKitRequestMessage {
+  source: typeof EXTENSION_MESSAGE_SOURCE;
+  type: 'copy-kit-request';
+  requestId: string;
+  job?: CopyKitJob;
+}
+
+export type ExtensionMessage =
+  | ExtensionJobsMessage
+  | ExtensionTriageRequestMessage
+  | ExtensionCopyKitRequestMessage;
+
+/** 侧栏分组：投递档案字段 / 简历要点 / 已存回答 / 邮件正文。 */
+export type CopyKitGroup = 'profile' | 'resume' | 'answers' | 'email';
+
+export interface CopyKitItem {
+  id: string;
+  group: CopyKitGroup;
+  label: string;
+  value: string;
+}
+
+/** App → bridge：可复制内容。items 为空说明还没填投递档案。 */
+export interface AppCopyKitResultMessage {
+  source: typeof APP_MESSAGE_SOURCE;
+  type: 'copy-kit-result';
+  requestId: string;
+  items: CopyKitItem[];
+}
 
 /** App → bridge：粗筛结果，只有档位和一句理由。 */
 export interface AppTriageResultMessage {
@@ -98,7 +138,11 @@ export interface AppAckMessage {
   externalIds: string[];
 }
 
-export type AppMessage = AppReadyMessage | AppAckMessage | AppTriageResultMessage;
+export type AppMessage =
+  | AppReadyMessage
+  | AppAckMessage
+  | AppTriageResultMessage
+  | AppCopyKitResultMessage;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -154,6 +198,37 @@ export const parseTriageRequest = (data: unknown): ExtensionTriageRequestMessage
   };
 };
 
+/** 侧栏一次最多显示这么多条，单条最长这么多字，防止异常数据把页面撑爆。 */
+export const MAX_COPY_KIT_ITEMS = 60;
+export const MAX_COPY_KIT_VALUE_LENGTH = 8_000;
+
+const COPY_KIT_GROUPS: readonly CopyKitGroup[] = ['profile', 'resume', 'answers', 'email'];
+
+const isCopyKitJob = (value: unknown): value is CopyKitJob =>
+  isRecord(value) && typeof value.title === 'string' && typeof value.company === 'string';
+
+/** 解析 bridge 发来的复制内容请求；岗位信息不合法就当没有。 */
+export const parseCopyKitRequest = (data: unknown): ExtensionCopyKitRequestMessage | null => {
+  if (!isRecord(data) || data.source !== EXTENSION_MESSAGE_SOURCE) return null;
+  if (data.type !== 'copy-kit-request' || typeof data.requestId !== 'string') return null;
+  const job = isCopyKitJob(data.job) && data.job.title.trim() ? data.job : undefined;
+  return {
+    source: EXTENSION_MESSAGE_SOURCE,
+    type: 'copy-kit-request',
+    requestId: data.requestId,
+    ...(job ? { job: { title: job.title, company: job.company } } : {}),
+  };
+};
+
+const isCopyKitItem = (value: unknown): value is CopyKitItem =>
+  isRecord(value) &&
+  typeof value.id === 'string' &&
+  typeof value.label === 'string' &&
+  typeof value.value === 'string' &&
+  value.value.trim().length > 0 &&
+  value.value.length <= MAX_COPY_KIT_VALUE_LENGTH &&
+  COPY_KIT_GROUPS.includes(value.group as CopyKitGroup);
+
 const isTriageResult = (value: unknown): value is TriageResult =>
   isRecord(value) &&
   typeof value.id === 'string' &&
@@ -176,6 +251,16 @@ export const parseAppMessage = (data: unknown): AppMessage | null => {
       type: 'triage-result',
       requestId: data.requestId,
       results: Array.isArray(data.results) ? data.results.filter(isTriageResult) : [],
+    };
+  }
+  if (data.type === 'copy-kit-result' && typeof data.requestId === 'string') {
+    return {
+      source: APP_MESSAGE_SOURCE,
+      type: 'copy-kit-result',
+      requestId: data.requestId,
+      items: Array.isArray(data.items)
+        ? data.items.filter(isCopyKitItem).slice(0, MAX_COPY_KIT_ITEMS)
+        : [],
     };
   }
   return null;

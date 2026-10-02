@@ -24,6 +24,8 @@ dist-ssr
 *.sln
 *.sw?
 extension/dist
+test-results
+playwright-report
 
 # Cloudflare wrangler
 .wrangler

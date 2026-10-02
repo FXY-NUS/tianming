@@ -31,3 +31,16 @@ jobs:
           path: extension/dist/
           if-no-files-found: error
           retention-days: 90
+
+  extension-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # 真 Chromium 加载扩展：LinkedIn 用保存的页面片段，/api/generate 用桩，不碰外网也不调 Gemini。
+      - run: npm run test:e2e
