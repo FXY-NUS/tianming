@@ -32,4 +32,6 @@ Chrome → `chrome://extensions` → 打开「开发者模式」→「加载已�
 
 ## 接后端代理（Phase 6.4）
 
-代理契约见 `doc/backend-proxy.md`（`POST /api/generate`，请求形状复用 `server/contract.ts`）。`src/scoring.ts` 的 `getTriageScorer()` 换成调代理的实现即可；LLM 只抽证据，分数仍由 MatchEngine 代码算（铁律 1），代理口令放 `chrome.storage`，不进扩展包，content script 和徽章不用动。徽章状态：`pass` / `maybe` / `reject` / `need_full_jd` / `unscored`。
+代理已合入 main，契约见 `doc/backend-proxy.md`（`POST /api/generate`，请求形状复用 `server/contract.ts`）。但扩展不能直接调代理给卡片打分：`scoreBatchScreenRecord` 需要完整的 `UserContext`（简历、偏好、画像），这些只在天命 Web App 的 IndexedDB 里，扩展拿不到，也不该把简历数据复制进扩展存储（D6）。
+
+下一步的做法：卡片快照经 `appBridge` 交给打开着的天命页面，由 Web App 照旧调 Flash 抽证据、`scoreBatchScreenRecord` 算分，再把档位回给扩展。`src/scoring.ts` 的 `getTriageScorer()` 是唯一切换点，content script 和徽章不用动。天命页面没打开、或请求失败时降级为「未评分」。徽章状态：`pass` / `maybe` / `reject` / `need_full_jd` / `unscored`。

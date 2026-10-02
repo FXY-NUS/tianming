@@ -1,12 +1,7 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 import { ResumeStructured } from '../types';
 import { RESUME_PARSE_PROMPT } from '../constants';
-
-const getApiKey = (): string => {
-  const fromLocal = typeof window !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null;
-  const fromEnv = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
-  return fromLocal || fromEnv || '';
-};
+import { generateContent } from './llmClient';
 
 const SUPPORTED_MIMES = [
   'application/pdf',
@@ -185,9 +180,7 @@ export async function parseResumeText(text: string): Promise<ParseResult> {
 }
 
 async function callGeminiWithMultimodal(mime: string, base64: string): Promise<ParseResult> {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
-
-  const response = await ai.models.generateContent({
+  const response = await generateContent({
     model: 'gemini-3-pro-preview',
     contents: [
       {
@@ -226,9 +219,7 @@ async function callGeminiWithMultimodal(mime: string, base64: string): Promise<P
 }
 
 async function callGeminiWithText(text: string): Promise<ParseResult> {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
-
-  const response = await ai.models.generateContent({
+  const response = await generateContent({
     model: 'gemini-3-pro-preview',
     contents: `${RESUME_PARSE_PROMPT}\n\n【用户简历】：\n${text}`,
     config: {
