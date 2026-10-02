@@ -3,14 +3,19 @@
   "name": "天命 · 岗位助手",
   "version": "0.1.0",
   "description": "在 LinkedIn 岗位列表上给已加载的卡片打天命徽章；点开岗位详情后，一键把 JD 送进天命做匹配分析。只读你正在看的页面，不自动翻页、不后台抓取。",
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage", "tabs", "scripting"],
   "host_permissions": [],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
     "default_title": "打开天命"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {
@@ -19,7 +24,7 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
       "js": ["appBridge.js"],
       "run_at": "document_start"
     }

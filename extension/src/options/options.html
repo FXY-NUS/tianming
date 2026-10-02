@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>天命 · 岗位助手 设置</title>
+    <style>
+      body {
+        font:
+          14px/1.6 system-ui,
+          sans-serif;
+        margin: 24px;
+        max-width: 520px;
+        color: #1e293b;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font: inherit;
+      }
+      button {
+        margin-top: 10px;
+        padding: 6px 16px;
+        border: none;
+        border-radius: 999px;
+        background: #4f46e5;
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .hint {
+        color: #64748b;
+        font-size: 12px;
+      }
+      #status[data-kind='invalid'],
+      #status[data-kind='denied'] {
+        color: #b91c1c;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <label for="app-url">天命网址</label>
+      <input id="app-url" type="text" placeholder="https://你的天命网址" autocomplete="off" />
+      <p class="hint">
+        留空就用默认地址 <code id="default-url"></code>。保存时 Chrome
+        会问一次能否访问这个网站，选「允许」。
+      </p>
+      <button type="submit">保存</button>
+    </form>
+    <p id="status" role="status"></p>
+    <script src="options.js"></script>
+  </body>
+</html>

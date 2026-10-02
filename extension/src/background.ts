@@ -1,5 +1,7 @@
 import type { CapturedJob } from '../../services/extensionProtocol';
-import { APP_URL, APP_URL_PATTERNS, PENDING_JOBS_KEY, type RuntimeRequest } from './messages';
+import { APP_URL_KEY, appTabPatterns, readAppUrl } from './appUrl';
+import { syncBridgeRegistration } from './bridgeRegistration';
+import { PENDING_JOBS_KEY, type RuntimeRequest } from './messages';
 import { enqueueJob } from './pendingQueue';
 import { getTriageScorer } from './scoring';
 
@@ -8,6 +10,7 @@ import { getTriageScorer } from './scoring';
  * - capture：岗位入待送队列（chrome.storage.local），天命页面打开着就会被 bridge 立刻送过去。
  * - triage：转给评分适配层（代理接好前一律「未评分」）。
  * - open-app：切到已打开的天命标签页，没有就新开一个。
+ * 天命网址可在设置页改（见 appUrl.ts）；改了就把 bridge 重新注册到新网址。
  */
 
 const enqueue = async (job: CapturedJob) => {
@@ -18,16 +21,46 @@ const enqueue = async (job: CapturedJob) => {
   await chrome.storage.local.set({ [PENDING_JOBS_KEY]: enqueueJob(queue, job) });
 };
 
+/** match pattern 不区分端口，再按来源精确筛一遍，免得切到本机别的端口上的页面。 */
+const sameOrigin = (tabUrl: string | undefined, appUrl: string) => {
+  if (!tabUrl) return false;
+  const tab = new URL(tabUrl);
+  const app = new URL(appUrl);
+  const host = (hostname: string) => (hostname === '127.0.0.1' ? 'localhost' : hostname);
+  return (
+    tab.protocol === app.protocol &&
+    tab.port === app.port &&
+    host(tab.hostname) === host(app.hostname)
+  );
+};
+
 const openApp = async () => {
-  const [existing] = await chrome.tabs.query({ url: APP_URL_PATTERNS });
+  const appUrl = await readAppUrl(chrome.storage.local);
+  const tabs = await chrome.tabs.query({ url: appTabPatterns(appUrl) });
+  const existing = tabs.find((tab) => sameOrigin(tab.url, appUrl));
   if (existing?.id !== undefined) {
     await chrome.tabs.update(existing.id, { active: true });
     if (existing.windowId !== undefined)
       await chrome.windows.update(existing.windowId, { focused: true });
     return;
   }
-  await chrome.tabs.create({ url: APP_URL });
+  await chrome.tabs.create({ url: appUrl });
 };
+
+const syncBridge = async () => {
+  const appUrl = await readAppUrl(chrome.storage.local);
+  await syncBridgeRegistration(appUrl, {
+    scripting: chrome.scripting,
+    permissions: chrome.permissions,
+  });
+};
+
+chrome.runtime.onInstalled.addListener(() => void syncBridge());
+chrome.runtime.onStartup.addListener(() => void syncBridge());
+chrome.permissions.onAdded.addListener(() => void syncBridge());
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes[APP_URL_KEY]) void syncBridge();
+});
 
 chrome.runtime.onMessage.addListener((message: RuntimeRequest, _sender, sendResponse) => {
   const handle = async () => {
