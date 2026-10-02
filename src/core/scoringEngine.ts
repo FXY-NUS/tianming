@@ -17,10 +17,10 @@ import type {
   SkillEvidence,
 } from './matchTypes';
 
-export const SCORING_VERSION = 'phase4-scoring-v2.0';
+export const SCORING_VERSION = 'phase4-scoring-v2.1';
 
 export const DEFAULT_SCORING_RUBRIC: ScoringRubric = {
-  version: 'rubric-v1.1',
+  version: 'rubric-v1.2',
   personaWeightCap: 0.15,
   dimensions: [
     { key: 'experience', label: 'Experience fit', weight: 0.2, enabled: true },
@@ -69,8 +69,10 @@ export function buildMatchScore(input: ScoringInput): MatchScore {
  *
  * The LLM's Pass B evidence sees only the active resume in its prompt, so its
  * matched/missing/transferable categorisation is biased to that resume. We
- * extract just the *JD-required* skill names (the union of all three lists)
- * and re-check each user resume locally against its `structured.skills` fields.
+ * extract just the *JD-required* skill names (matched + missing; transferable
+ * is left out since rubric-v1.2, see collectJdSkills) and re-check each user
+ * resume locally against its `structured.skills` fields. Ties on coverage go to
+ * the more focused resume, then to the active one.
  *
  * Limitation: we can only re-check against skills the LLM already surfaced. A
  * resume whose strongest skills weren't even mentioned in the JD-skill list
@@ -87,8 +89,10 @@ export function computeResumeBreakdown(
   if (jdSkills.length === 0) return undefined;
 
   const totalJdSkills = jdSkills.length;
+  const resumeSkillCounts = new Map<string, number>();
   const perResume: ResumeSkillCoverage[] = user.resumes.map((resume) => {
     const resumeSkillSet = collectResumeSkills(resume);
+    resumeSkillCounts.set(resume.id, resumeSkillSet.size);
     const covered: string[] = [];
     const missing: string[] = [];
     for (const skill of jdSkills) {
@@ -106,9 +110,16 @@ export function computeResumeBreakdown(
     };
   });
 
+  // 覆盖数相同 → 推荐更聚焦的简历（命中数 / 简历技能总数更高），再相同才偏向当前激活简历。
+  // 防止"什么都会"简历靠堆关键词在平手时排第一（rubric-v1.2）。
+  const focus = (entry: ResumeSkillCoverage) =>
+    entry.coverageCount / Math.max(1, resumeSkillCounts.get(entry.resumeId) ?? 0);
   perResume.sort((a, b) => {
     if (b.coverageCount !== a.coverageCount) return b.coverageCount - a.coverageCount;
-    return b.coverageRatio - a.coverageRatio;
+    if (focus(b) !== focus(a)) return focus(b) - focus(a);
+    if (a.resumeId === user.activeResumeId) return -1;
+    if (b.resumeId === user.activeResumeId) return 1;
+    return 0;
   });
 
   return {
@@ -119,14 +130,15 @@ export function computeResumeBreakdown(
   };
 }
 
+/**
+ * rubric-v1.2：只取 matched + missing 这两类 JD 直接要求。transferable 的 skill 名是
+ * "简历只沾边的那项 JD 要求"，拿它去和简历技能逐字比对没有意义；旧实现把它也算进来，
+ * 结果是 Gemini 误塞的沾边关键词让堆词最多的简历永远排第一。
+ */
 function collectJdSkills(evidence: ExtractedEvidence): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  const sources = [
-    ...evidence.matchedSkills,
-    ...evidence.missingSkills,
-    ...evidence.transferableSkills,
-  ];
+  const sources = [...evidence.matchedSkills, ...evidence.missingSkills];
   for (const item of sources) {
     const skill = item.skill?.trim();
     if (!skill) continue;
@@ -497,21 +509,22 @@ function scoreAvoidKeywords(
   };
 }
 
+/**
+ * rubric-v1.2：每条 transferable 是"JD 要求、简历只沾边"的一项需求——分母按完整需求计，
+ * 分子固定半分，且不再叠加 union ×0.5。旧算法分子分母都按半权，等于把沾边项当成完整命中，
+ * "什么都会"简历的沾边关键词越多分越高（phase-4-6-notes §4.1）。union ×0.5 仍作用于 matched。
+ */
+const TRANSFERABLE_CREDIT = 0.5;
+
 function scoreSkillEvidence(
   evidence: ExtractedEvidence,
   activeResumeId?: string,
   allResumes: ResumeProfile[] = [],
 ): DimensionScore {
   const matched = weightedSkillCount(evidence.matchedSkills, 1, activeResumeId, allResumes, true);
-  const transferable = weightedSkillCount(
-    evidence.transferableSkills,
-    0.5,
-    activeResumeId,
-    allResumes,
-    true,
-  );
+  const transferable = weightedSkillCount(evidence.transferableSkills, TRANSFERABLE_CREDIT);
   const matchedDenominator = weightedSkillCount(evidence.matchedSkills, 1);
-  const transferableDenominator = weightedSkillCount(evidence.transferableSkills, 0.5);
+  const transferableDenominator = weightedSkillCount(evidence.transferableSkills, 1);
   const missing = weightedSkillCount(evidence.missingSkills, 1);
   const denominator = matchedDenominator + transferableDenominator + missing;
 
@@ -519,10 +532,11 @@ function scoreSkillEvidence(
     return unknownDimension('skill', 'Skill match', 'LLM returned no skill evidence.');
   }
 
-  const unionPenaltyCount = [
-    ...applyUnionWeightPenalty(evidence.matchedSkills, activeResumeId, allResumes),
-    ...applyUnionWeightPenalty(evidence.transferableSkills, activeResumeId, allResumes),
-  ].filter((multiplier) => multiplier < 1).length;
+  const unionPenaltyCount = applyUnionWeightPenalty(
+    evidence.matchedSkills,
+    activeResumeId,
+    allResumes,
+  ).filter((multiplier) => multiplier < 1).length;
 
   const score = clampScore(((matched + transferable) / denominator) * 100);
   return {

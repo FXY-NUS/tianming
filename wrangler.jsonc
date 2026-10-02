@@ -1,0 +1,28 @@
+// Cloudflare Worker：一个 Worker 同时托管前端静态资源（dist/）和后端代理 /api/*，同源免 CORS。
+// 密钥不写在这里：GEMINI_API_KEY / PROXY_TOKEN 用 `npx wrangler secret put` 设置。
+// 部署步骤见 doc/backend-proxy.md §7。
+{
+  "name": "tianming",
+  "main": "server/worker.ts",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // /api/* 先进 Worker（代理），其余路径直接由静态资源响应。
+    "run_worker_first": ["/api/*"],
+  },
+  // 按客户端 IP 限流：每 60 秒最多 20 次 /api/generate，超出返回 429 RATE_LIMITED。
+  // period 只能是 10 或 60；namespace_id 是本账号内自取的整数，不是密钥。
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 },
+    },
+  ],
+  "vars": {
+    // 跨域白名单，逗号分隔。网页与代理同源时留空；扩展上线后填 chrome-extension://<扩展 id>。
+    "ALLOWED_ORIGINS": "",
+  },
+}
