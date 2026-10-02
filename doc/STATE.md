@@ -54,4 +54,4 @@
 
 - `wrangler.jsonc`：一个 Worker 托管网页 `dist/` 和 `/api/*`（同源）；按 IP 限流 20 次 / 分钟，超限 429 `RATE_LIMITED`。
 - `npm run deploy` / `npm run deploy:dry-run`；密钥只走 `wrangler secret put`。
-- 下一步（Flora 亲手）：按 `doc/backend-proxy.md` §7.2 登录 wrangler → 部署 → 设两个 secret → §7.3 验证。
+- 下一步（Flora 亲手）：按 `doc/backend-proxy.md` §7.2 在 Cloudflare 建 API token → GitHub 加 secrets → Actions 里手动运行 Deploy（填 deploy）→ §7.3 验证。部署只能手动触发，合并不会上线。
