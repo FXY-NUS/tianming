@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react';
 import {
   APP_MESSAGE_SOURCE,
+  parseCopyKitRequest,
   parseExtensionMessage,
   parseTriageRequest,
   type AppMessage,
   type CapturedJob,
+  type CopyKitItem,
+  type CopyKitJob,
   type TriageResult,
 } from '../../services/extensionProtocol';
 import type { JobCardSnapshot } from '../core/matchTypes';
@@ -16,6 +19,8 @@ interface Options {
   onJobs: (jobs: CapturedJob[]) => void;
   /** 扩展请求给卡片打徽章；不传就不响应（扩展那边会显示「未评分」）。 */
   onTriage?: (cards: JobCardSnapshot[]) => Promise<TriageResult[]>;
+  /** 扩展投递页侧栏要可复制内容；不传就不响应（侧栏那边会提示打开天命）。 */
+  onCopyKit?: (job: CopyKitJob | undefined) => CopyKitItem[];
 }
 
 const post = (message: AppMessage) => window.postMessage(message, window.location.origin);
@@ -23,14 +28,17 @@ const post = (message: AppMessage) => window.postMessage(message, window.locatio
 /**
  * 接浏览器扩展送来的岗位：bridge content script 通过 window.postMessage 发 jobs，
  * 这里交给 onJobs 后回 ack（重复的也 ack，让扩展出队）。扩展发来的粗筛请求交给 onTriage，
- * 结果按 requestId 回给 bridge。页面没装扩展时什么都不会发生。
+ * 结果按 requestId 回给 bridge。投递页侧栏要的可复制内容交给 onCopyKit，同样按 requestId 回。
+ * 页面没装扩展时什么都不会发生。
  */
-export const useExtensionImport = ({ ready, onJobs, onTriage }: Options) => {
+export const useExtensionImport = ({ ready, onJobs, onTriage, onCopyKit }: Options) => {
   const onJobsRef = useRef(onJobs);
   const onTriageRef = useRef(onTriage);
+  const onCopyKitRef = useRef(onCopyKit);
   useEffect(() => {
     onJobsRef.current = onJobs;
     onTriageRef.current = onTriage;
+    onCopyKitRef.current = onCopyKit;
   });
 
   useEffect(() => {
@@ -50,6 +58,18 @@ export const useExtensionImport = ({ ready, onJobs, onTriage }: Options) => {
             results,
           }),
         );
+        return;
+      }
+      const copyKit = parseCopyKitRequest(event.data);
+      if (copyKit) {
+        const handler = onCopyKitRef.current;
+        if (!handler) return;
+        post({
+          source: APP_MESSAGE_SOURCE,
+          type: 'copy-kit-result',
+          requestId: copyKit.requestId,
+          items: handler(copyKit.job),
+        });
         return;
       }
       const message = parseExtensionMessage(event.data);

@@ -54,6 +54,7 @@ import { PasteJobModal } from './src/components/PasteJobModal';
 import { useExtensionImport } from './src/hooks/useExtensionImport';
 import { getLlmMode } from './services/llmClient';
 import { createCachedTriage, triageCards } from './services/extensionTriage';
+import { buildCopyKit } from './services/copyKit';
 import {
   jobFromPastedText,
   jobsFromExtension,
@@ -473,6 +474,7 @@ const App = () => {
     ready: storageReady,
     onJobs: (captured) => persistJobs((prev) => [...jobsFromExtension(captured, prev), ...prev]),
     onTriage: (cards) => extensionTriage(cards, userCtx),
+    onCopyKit: (job) => buildCopyKit(userCtx, job),
   });
 
   const handlePasteJob = (input: JobImportInput): string | null => {
