@@ -2,28 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Job, UserContext } from '../types';
 import { batchScreenJobs, deepAuditJob } from './geminiService';
 
-const mockGenerateContent = vi.fn();
-const mockSendMessage = vi.fn();
+const { mockGenerateContent } = vi.hoisted(() => ({ mockGenerateContent: vi.fn() }));
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(function () {
-    return {
-      models: {
-        generateContent: mockGenerateContent,
-      },
-      chats: {
-        create: vi.fn(() => ({
-          sendMessage: mockSendMessage,
-        })),
-      },
-    };
-  }),
-  Type: {
-    OBJECT: 'object',
-    ARRAY: 'array',
-    STRING: 'string',
-    NUMBER: 'number',
-  },
+vi.mock('./llmClient', () => ({
+  generateContent: mockGenerateContent,
+  getLlmMode: () => 'proxy',
 }));
 
 const ctx: UserContext = {
@@ -86,8 +69,6 @@ const evidence = {
 describe('geminiService scoring integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
-    localStorage.setItem('GEMINI_API_KEY', 'test-key');
   });
 
   it('uses the scoring engine result for batch screening instead of an LLM score', async () => {

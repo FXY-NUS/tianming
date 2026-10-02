@@ -34,3 +34,10 @@
 
 ---
 *STATE v1.0 · 2026-07-07 · 初版，由使用效率分析（`doc/usage-analysis.md`）引入*
+
+## 后端代理（Phase 6.4 · 并行线程 · 2026-10-02）
+
+- 代理雏形在 `server/`（`contract.ts` 契约 / `handler.ts` 处理 / `worker.ts` Cloudflare 入口 /
+  `vitePlugin.ts` 本地同端口）；前端经 `services/llmClient.ts` 走 `/api/generate`，Key 已不在浏览器。
+- 接口契约 v1 与扩展对接要点见 `doc/backend-proxy.md` §2；扩展线程按它对接。
+- 下一步：补 `wrangler.toml` 并真部署一次 Worker；上线前加限流（见 `doc/backend-proxy.md` §5）。

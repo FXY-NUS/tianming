@@ -1,29 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseResumeFile, parseResumeText } from './resumeParser';
 
-const mockGenerateContent = vi.fn();
+const { mockGenerateContent } = vi.hoisted(() => ({ mockGenerateContent: vi.fn() }));
 
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(function () {
-    return {
-      models: {
-        generateContent: mockGenerateContent,
-      },
-    };
-  }),
-  Type: {
-    OBJECT: 'object',
-    ARRAY: 'array',
-    STRING: 'string',
-    NUMBER: 'number',
-  },
+vi.mock('./llmClient', () => ({
+  generateContent: mockGenerateContent,
+  getLlmMode: () => 'proxy',
 }));
 
 describe('resumeParser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
-    localStorage.setItem('GEMINI_API_KEY', 'test-key');
   });
 
   describe('parseResumeFile', () => {

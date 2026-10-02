@@ -1,14 +1,8 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 import type { Job, UserContext } from '../types';
 import type { ExtractedEvidence, SkillEvidence } from '../src/core/matchTypes';
 import { buildResumeUnionSection } from '../constants';
-
-const getApiKey = (): string => {
-  const fromLocal = typeof window !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null;
-  const fromEnv = (import.meta as { env?: { VITE_GEMINI_API_KEY?: string } }).env
-    ?.VITE_GEMINI_API_KEY;
-  return fromLocal || fromEnv || '';
-};
+import { generateContent } from './llmClient';
 
 export type EvidenceExtractionErrorKind = 'gemini_error' | 'schema_violation' | 'empty_response';
 
@@ -35,8 +29,7 @@ export async function extractJobEvidence(
   ctx: UserContext,
 ): Promise<EvidenceExtractionResult> {
   try {
-    const ai = new GoogleGenAI({ apiKey: getApiKey() });
-    const response = await ai.models.generateContent({
+    const response = await generateContent({
       model: 'gemini-3-pro-preview',
       contents: buildEvidencePrompt(job, ctx),
       config: {
