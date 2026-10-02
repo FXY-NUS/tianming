@@ -53,6 +53,7 @@ import { ApplyAssistantPanel } from './src/components/ApplyAssistantPanel';
 import { PasteJobModal } from './src/components/PasteJobModal';
 import { useExtensionImport } from './src/hooks/useExtensionImport';
 import { getLlmMode } from './services/llmClient';
+import { createCachedTriage, triageCards } from './services/extensionTriage';
 import {
   jobFromPastedText,
   jobsFromExtension,
@@ -460,9 +461,18 @@ const App = () => {
     reader.readAsText(file);
   };
 
+  // 扩展卡片粗筛：同一会话内每张卡片只评一次；画像改了以后已缓存的徽章不重评。
+  const [extensionTriage] = useState(() =>
+    createCachedTriage((cards, ctx) => {
+      trackUsage('flash');
+      return triageCards(cards, ctx, batchScreenJobs);
+    }),
+  );
+
   useExtensionImport({
     ready: storageReady,
     onJobs: (captured) => persistJobs((prev) => [...jobsFromExtension(captured, prev), ...prev]),
+    onTriage: (cards) => extensionTriage(cards, userCtx),
   });
 
   const handlePasteJob = (input: JobImportInput): string | null => {

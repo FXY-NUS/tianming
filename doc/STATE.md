@@ -48,3 +48,4 @@
 - 粗筛评分只留了 `extension/src/scoring.ts` 一个适配层，徽章暂时一律「未评分」。代理已合入，但 `scoreBatchScreenRecord` 要用户画像（在 Web App 的 IndexedDB 里），下一步让卡片经 bridge 交给打开着的天命页面打分，见 `extension/README.md`。
 - 用法和结构见 `extension/README.md`。
 - 免 npm 安装：CI 每次构建上传扩展安装包（Actions 运行页 Artifacts）；天命网址构建时取仓库变量 `TIANMING_APP_URL`（缺省 localhost:3000），装好后也可在扩展设置页改。部署上线后记得设这个变量。
+- 卡片徽章已接评分：卡片经 bridge 交给打开着的天命页面，复用现有批量初筛（不改评分和提示词），只回档位和理由；天命页面没开就「未评分」。见 `services/extensionTriage.ts`。

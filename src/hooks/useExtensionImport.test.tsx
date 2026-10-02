@@ -79,4 +79,39 @@ describe('useExtensionImport', () => {
     expect(postMessage).not.toHaveBeenCalled();
     expect(onJobs).not.toHaveBeenCalled();
   });
+
+  it('answers triage requests with the handler results under the same requestId', async () => {
+    const posted: unknown[] = [];
+    vi.spyOn(window, 'postMessage').mockImplementation((message) => {
+      posted.push(message);
+    });
+    const onTriage = vi.fn(async (cards: { id: string }[]) =>
+      cards.map((card) => ({ id: card.id, verdict: 'pass' as const })),
+    );
+    renderHook(() => useExtensionImport({ ready: true, onJobs: vi.fn(), onTriage }));
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: {
+            source: 'tianming-extension',
+            type: 'triage-request',
+            requestId: 'r1',
+            cards: [
+              { id: '9', source: 'linkedin', title: 'X', capturedAt: '2026-10-02T00:00:00.000Z' },
+            ],
+          },
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onTriage).toHaveBeenCalledTimes(1);
+    expect(posted.at(-1)).toEqual({
+      source: 'tianming-app',
+      type: 'triage-result',
+      requestId: 'r1',
+      results: [{ id: '9', verdict: 'pass' }],
+    });
+  });
 });

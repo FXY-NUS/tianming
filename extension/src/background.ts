@@ -3,12 +3,12 @@ import { APP_URL_KEY, appTabPatterns, readAppUrl } from './appUrl';
 import { syncBridgeRegistration } from './bridgeRegistration';
 import { PENDING_JOBS_KEY, type RuntimeRequest } from './messages';
 import { enqueueJob } from './pendingQueue';
-import { getTriageScorer } from './scoring';
+import { createAppTabScorer } from './scoring';
 
 /**
  * Service worker：收 content script 的消息。
  * - capture：岗位入待送队列（chrome.storage.local），天命页面打开着就会被 bridge 立刻送过去。
- * - triage：转给评分适配层（代理接好前一律「未评分」）。
+ * - triage：交给打开着的天命页面打分（见 scoring.ts），没打开就「未评分」。
  * - open-app：切到已打开的天命标签页，没有就新开一个。
  * 天命网址可在设置页改（见 appUrl.ts）；改了就把 bridge 重新注册到新网址。
  */
@@ -34,10 +34,19 @@ const sameOrigin = (tabUrl: string | undefined, appUrl: string) => {
   );
 };
 
-const openApp = async () => {
+const findAppTab = async () => {
   const appUrl = await readAppUrl(chrome.storage.local);
   const tabs = await chrome.tabs.query({ url: appTabPatterns(appUrl) });
-  const existing = tabs.find((tab) => sameOrigin(tab.url, appUrl));
+  return { appUrl, tab: tabs.find((tab) => sameOrigin(tab.url, appUrl)) };
+};
+
+const triageScorer = createAppTabScorer({
+  findAppTab: async () => (await findAppTab()).tab?.id ?? null,
+  sendToTab: (tabId, message) => chrome.tabs.sendMessage(tabId, message),
+});
+
+const openApp = async () => {
+  const { appUrl, tab: existing } = await findAppTab();
   if (existing?.id !== undefined) {
     await chrome.tabs.update(existing.id, { active: true });
     if (existing.windowId !== undefined)
@@ -69,7 +78,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeRequest, _sender, sendResp
         await enqueue(message.job);
         return { ok: true as const };
       case 'triage':
-        return { results: await getTriageScorer().score(message.cards) };
+        return { results: await triageScorer.score(message.cards) };
       case 'open-app':
         await openApp();
         return { ok: true as const };
