@@ -4,22 +4,22 @@
 > `/handoff-sync` 技能（或手动）更新；只写"现在在哪 + 下一步 + 阻塞"，历史和决策依据一律
 > 指向 HANDOFF/notes，不在这里复述。
 
-## 当前位置（2026-07-07 · HANDOFF v2.0）
+## 当前位置（2026-10-02 · HANDOFF v2.0）
 
-- **Milestone**：M1 收尾阶段。Phase 0–5.5 全部 ✅ Done（最新：Phase 5.5 Apply Assistant L2 · PR #34 · 零 LLM）。
+- **Milestone**：M1 收尾阶段。Phase 0–5.5 全部 ✅ Done。
+- **2026-10-02 合入**：PR #36（`@types/react` + 修 2 个 tsc 错误 + GitHub Actions CI：typecheck / lint / format / test / build）、PR #38（侧栏「粘贴 JD」入口，D4 第二层兜底）、PR #40（后端代理雏形，见文末）。
 - **Phase 4.6**：数据层 ✅（PR #31）；最简文字 banner 已随 PR #34 占位；完整视觉 2f/2g 延后 M3。
-- **main HEAD**：`d507c72`（PR #34 merge）之后仅有文档/工作流基建 commit。
+- **反通胀 smoke 已自动化**：`src/core/unionInflation.smoke.test.ts`。**实测发现缺口**：激活"什么都会"简历时分数反超专精简历（71.3 → 78.7），breakdown 也把它排第一，详见 `doc/phase-4-6-notes.md` §4.1。
 
 ## 下一步（重入锚点 · 按优先级）
 
-1. **M1 收尾两件事**：① 简历多版本切换 UX 整理；② 反通胀端到端 smoke
-   （"什么都会"简历 vs 单一方向简历对同一 JD 跑 audit，验证无 union 通胀 → Codex 本地）。
-2. **待补欠账**：`doc/phase-5-5-notes.md` §4 手动 smoke 清单四项未勾。
-3. M1 宣告 Done 后 → **M2：Track C 浏览器扩展（Phase 6）启动**，先由 Claude Code 写 Codex brief。
+1. **反通胀缺口怎么修，等用户拍板**（选项见 phase-4-6-notes §4.1 实测记录）。拍板后：改 `scoreSkillEvidence` / `computeResumeBreakdown`，bump `scoringVersion` + `rubricVersion`，把 smoke 里两条 `it.fails` 改回 `it`。
+2. **待补欠账**：`doc/phase-5-5-notes.md` §4 手动 smoke 清单四项未勾（需真实 Gemini key，Codex 本地跑）。
+3. M2 已并行启动：后端代理（Phase 6.4，PR #40 已合，见文末）与 Track C 浏览器扩展（Phase 6.1–6.3）各由独立线程推进；M1 宣告 Done 只差第 1 条。
 
 ## 阻塞 / 待用户拍板
 
-- 无硬阻塞。4.6 完整视觉（2f/2g）按既定决策等 M3 + Claude Design，无需现在拍板。
+- 反通胀缺口修法（见上）。4.6 完整视觉（2f/2g）按既定决策等 M3 + Claude Design，无需现在拍板。
 
 ## 快速读文指引（重复接手用）
 
@@ -33,7 +33,7 @@
 （坏例子："继续 Phase 6"；好例子："给 Codex 写 Phase 6 brief，先定 MV3 manifest 权限清单"）。
 
 ---
-*STATE v1.0 · 2026-07-07 · 初版，由使用效率分析（`doc/usage-analysis.md`）引入*
+*STATE v1.1 · 2026-10-02 · 同步 PR #36 / #38 / #40 + 反通胀 smoke 实测*
 
 ## 后端代理（Phase 6.4 · 并行线程 · 2026-10-02）
 

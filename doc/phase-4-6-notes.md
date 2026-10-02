@@ -125,7 +125,23 @@ recommended_resume: {
 - C 分数 ≥ A → union 通胀，权重约束失效
 - C 跟 A 完全等分 → 来源标注未生效，Gemini 没看到 sourceResumeIds
 
-**实测记录**：⏳ 待 Codex 本地跑完填
+**实测记录**（2026-10-02 · 代码侧自动化 `src/core/unionInflation.smoke.test.ts`，Gemini 证据用手写夹具代替，评分走真实引擎）：
+
+| 激活简历 | overall | skill 维度 | breakdown bestResumeId |
+|---|---|---|---|
+| A · ML 技术版 | 71.3 | 71.3 | C |
+| B · 咨询版 | 42.6 | 42.6 | C |
+| C · 什么都会版 | **78.7** | **78.7** | C |
+
+- ✅ A > B：成立，B 激活时 ML / Python / AWS 全部减半。
+- ❌ **C > A：命中反例，Q3 没能挡住。** 原因：×0.5 只打折"来自非激活简历"的 skill，C 本身就是所有 skill 的来源，激活 C 时没有一条被打折；transferable 里多出来的咨询 / marketing 关键词全额计入。
+- ❌ **breakdown 把 C 排第一**：`collectJdSkills` 把 transferable 也算成"JD 技能"，技能最多的简历必然 coverage 最高。
+- 两条失败预期以 `it.fails` 留在测试里，修复后改回 `it`。
+
+**候选修法（待拍板）**：
+1. 代码侧：transferable 对分子的贡献封顶（例如不超过 missing 权重的一半），且 breakdown 只按 matched + missing 算 JD 技能；bump scoringVersion / rubricVersion。
+2. prompt 侧：Pass B 明确 transferable 只能是"JD 要求但简历只沾边"的项，一条 JD 要求最多一条；跑 `/adversarial-prompt-review`。
+3. 两者都做（推荐：prompt 约束 Gemini 少塞，代码封顶兜底）。
 
 ### 4.2 退化分支测试
 

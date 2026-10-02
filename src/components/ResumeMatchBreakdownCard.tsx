@@ -3,10 +3,19 @@ import type { ResumeMatchBreakdown } from '../core/matchTypes';
 
 interface Props {
   breakdown: ResumeMatchBreakdown;
+  /** 当前激活简历（来自 UserContext，比 breakdown 里存的快照新）。 */
+  activeResumeId?: string;
+  /** 传了就在非当前简历旁显示「切换」按钮。 */
+  onSwitchResume?: (resumeId: string) => void;
 }
 
-export function ResumeMatchBreakdownCard({ breakdown }: Props) {
-  const { bestResumeId, activeResumeId, totalJdSkills, perResume } = breakdown;
+export function ResumeMatchBreakdownCard({
+  breakdown,
+  activeResumeId: liveActiveResumeId,
+  onSwitchResume,
+}: Props) {
+  const { bestResumeId, totalJdSkills, perResume } = breakdown;
+  const activeResumeId = liveActiveResumeId ?? breakdown.activeResumeId;
 
   if (perResume.length === 0 || totalJdSkills === 0) return null;
 
@@ -38,9 +47,20 @@ export function ResumeMatchBreakdownCard({ breakdown }: Props) {
       </div>
 
       {!singleResume && !isActiveBest && active && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 font-medium">
-          当前选用「{active.resumeLabel}」命中 {active.coverageCount}/{totalJdSkills}，建议切换至「
-          {best.resumeLabel}」
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 font-medium flex items-center gap-3">
+          <span className="flex-1">
+            当前选用「{active.resumeLabel}」命中 {active.coverageCount}/{totalJdSkills}
+            ，建议切换至「{best.resumeLabel}」
+          </span>
+          {onSwitchResume && (
+            <button
+              type="button"
+              onClick={() => onSwitchResume(best.resumeId)}
+              className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-black text-white hover:bg-amber-700"
+            >
+              切换
+            </button>
+          )}
         </div>
       )}
 
@@ -68,6 +88,16 @@ export function ResumeMatchBreakdownCard({ breakdown }: Props) {
                 <span className="text-xs font-black text-slate-600 w-12 text-right shrink-0">
                   {r.coverageCount}/{totalJdSkills}
                 </span>
+                {onSwitchResume && (
+                  <button
+                    type="button"
+                    onClick={() => onSwitchResume(r.resumeId)}
+                    disabled={isCurrent}
+                    className="shrink-0 w-12 rounded-md border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:invisible"
+                  >
+                    切换
+                  </button>
+                )}
               </div>
             );
           })}

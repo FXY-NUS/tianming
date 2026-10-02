@@ -32,6 +32,7 @@ import {
   RefreshCcw,
   Plus,
   ClipboardPaste,
+  FileText,
 } from 'lucide-react';
 import { ApplyProfile, Job, SavedAnswer, UserContext, UserPreferences } from './types';
 import {
@@ -714,6 +715,35 @@ const App = () => {
           </div>
         </div>
 
+        <div className="px-3 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2 shrink-0">
+          <FileText size={12} className="text-indigo-500 shrink-0" />
+          <span className="text-[10px] font-bold text-indigo-700 shrink-0">当前简历</span>
+          {userCtx.resumes.length > 0 ? (
+            <select
+              value={userCtx.activeResumeId ?? ''}
+              onChange={(e) => switchActiveResume(e.target.value)}
+              title="切换激活简历，初筛和审计都按它算"
+              className="flex-1 min-w-0 bg-white border border-indigo-200 rounded-md px-2 py-1 text-[11px] font-bold text-slate-700 outline-none focus:border-indigo-500"
+            >
+              {!userCtx.activeResumeId && <option value="">未选择</option>}
+              {userCtx.resumes.map((resume) => (
+                <option key={resume.id} value={resume.id}>
+                  {resume.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="flex-1 text-[11px] text-slate-500">还没有简历</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowResumeModal(true)}
+            className="shrink-0 text-[10px] font-bold text-indigo-700 hover:underline"
+          >
+            管理
+          </button>
+        </div>
+
         <div className="p-3 space-y-2 bg-white border-b shadow-sm shrink-0">
           <div className="relative">
             <Search
@@ -1010,7 +1040,11 @@ const App = () => {
                     )}
 
                     {selectedMatchScore?.resumeBreakdown && (
-                      <ResumeMatchBreakdownCard breakdown={selectedMatchScore.resumeBreakdown} />
+                      <ResumeMatchBreakdownCard
+                        breakdown={selectedMatchScore.resumeBreakdown}
+                        activeResumeId={userCtx.activeResumeId}
+                        onSwitchResume={switchActiveResume}
+                      />
                     )}
 
                     <div className="grid md:grid-cols-2 gap-6">
