@@ -41,3 +41,9 @@
   `vitePlugin.ts` 本地同端口）；前端经 `services/llmClient.ts` 走 `/api/generate`，Key 已不在浏览器。
 - 接口契约 v1 与扩展对接要点见 `doc/backend-proxy.md` §2；扩展线程按它对接。
 - 下一步：补 `wrangler.toml` 并真部署一次 Worker；上线前加限流（见 `doc/backend-proxy.md` §5）。
+
+## 代理部署准备（并行线程 · 2026-10-02）
+
+- `wrangler.jsonc`：一个 Worker 托管网页 `dist/` 和 `/api/*`（同源）；按 IP 限流 20 次 / 分钟，超限 429 `RATE_LIMITED`。
+- `npm run deploy` / `npm run deploy:dry-run`；密钥只走 `wrangler secret put`。
+- 下一步（Flora 亲手）：按 `doc/backend-proxy.md` §7.2 登录 wrangler → 部署 → 设两个 secret → §7.3 验证。
