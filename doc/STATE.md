@@ -6,20 +6,20 @@
 
 ## 当前位置（2026-10-02 · HANDOFF v2.0）
 
-- **Milestone**：M1 收尾阶段。Phase 0–5.5 全部 ✅ Done。
-- **2026-10-02 合入**：PR #36（`@types/react` + 修 2 个 tsc 错误 + GitHub Actions CI：typecheck / lint / format / test / build）、PR #38（侧栏「粘贴 JD」入口，D4 第二层兜底）、PR #40（后端代理雏形，见文末）。
+- **Milestone**：M1 ✅ Done（最后一项反通胀修复随 phase4-scoring-v2.1 合入），进入 M2。Phase 0–5.5 全部 ✅ Done。
+- **2026-10-02 合入**：PR #36（`@types/react` + 修 2 个 tsc 错误 + GitHub Actions CI：typecheck / lint / format / test / build）、PR #38（侧栏「粘贴 JD」入口，D4 第二层兜底）、PR #39（反通胀 smoke + 简历切换 UX）、PR #40（后端代理雏形，见文末）、PR #41（文档与依赖清理）。
 - **Phase 4.6**：数据层 ✅（PR #31）；最简文字 banner 已随 PR #34 占位；完整视觉 2f/2g 延后 M3。
-- **反通胀 smoke 已自动化**：`src/core/unionInflation.smoke.test.ts`。**实测发现缺口**：激活"什么都会"简历时分数反超专精简历（71.3 → 78.7），breakdown 也把它排第一，详见 `doc/phase-4-6-notes.md` §4.1。
+- **反通胀缺口已修**（phase4-scoring-v2.1 / rubric-v1.2）：transferable 按完整需求进分母、只给半分、不按来源区分；简历适配对比只数 JD 直接要求，平手推荐更聚焦的简历；三处提示词共用 `SKILL_BUCKET_RULES`。"什么都会"简历技能分从反超（78.7 vs 71.3）变为持平（68.5），推荐回到专精简历。前后实测见 `doc/phase-4-6-notes.md` §4.1，口径见 `doc/scoring-rubric.md` §3。
 
 ## 下一步（重入锚点 · 按优先级）
 
-1. **反通胀缺口怎么修，等用户拍板**（选项见 phase-4-6-notes §4.1 实测记录）。拍板后：改 `scoreSkillEvidence` / `computeResumeBreakdown`，bump `scoringVersion` + `rubricVersion`，把 smoke 里两条 `it.fails` 改回 `it`。
-2. **待补欠账**：`doc/phase-5-5-notes.md` §4 手动 smoke 清单四项未勾（需真实 Gemini key，Codex 本地跑）。
-3. M2 已并行启动：后端代理（Phase 6.4，PR #40 已合，见文末）与 Track C 浏览器扩展（Phase 6.1–6.3）各由独立线程推进；M1 宣告 Done 只差第 1 条。
+1. **真实 Gemini 对比一次**（需 key，本地跑）：同一份 JD 跑初筛 + 深审，看新口径下 transferable 是否变少、三类之间有没有重复；顺手勾掉 `doc/phase-5-5-notes.md` §4 手动 smoke 四项。
+2. M2 并行推进：后端代理（Phase 6.4）与 Track C 浏览器扩展（Phase 6.1–6.3）各由独立线程负责，进度见文末各自小节。
+3. M2 之后的下一个功能：扩展角标评分（经已打开的 tianming 页面打分，守 D6）→ Phase 6.5 投递页侧栏复制助手。
 
 ## 阻塞 / 待用户拍板
 
-- 反通胀缺口修法（见上）。4.6 完整视觉（2f/2g）按既定决策等 M3 + Claude Design，无需现在拍板。
+- 暂无。4.6 完整视觉（2f/2g）按既定决策等 M3 + Claude Design，无需现在拍板。
 
 ## 快速读文指引（重复接手用）
 
@@ -33,7 +33,7 @@
 （坏例子："继续 Phase 6"；好例子："给 Codex 写 Phase 6 brief，先定 MV3 manifest 权限清单"）。
 
 ---
-*STATE v1.1 · 2026-10-02 · 同步 PR #36 / #38 / #40 + 反通胀 smoke 实测*
+*STATE v1.2 · 2026-10-02 · 同步 PR #39 / #41 + 反通胀修复（phase4-scoring-v2.1）*
 
 ## 后端代理（Phase 6.4 · 并行线程 · 2026-10-02）
 
