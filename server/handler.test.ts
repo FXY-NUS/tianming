@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { extractText, handleProxyRequest, toGeminiRestBody, type FetchLike } from './handler';
+import {
+  extractText,
+  handleProxyRequest,
+  toGeminiRestBody,
+  type FetchLike,
+  type RateLimiter,
+} from './handler';
 
 const env = { GEMINI_API_KEY: 'server-secret-key' };
 
@@ -202,6 +208,112 @@ describe('handleProxyRequest', () => {
     expect(
       (await handleProxyRequest(new Request('http://proxy.test/api/generate'), env)).status,
     ).toBe(405);
+  });
+});
+
+describe('rate limiting', () => {
+  /** 假的 Cloudflare 限流绑定：每个 key 前 `limit` 次放行，之后拒绝。 */
+  const fakeLimiter = (limit: number) => {
+    const counts = new Map<string, number>();
+    return {
+      limit: vi.fn<RateLimiter['limit']>(async ({ key }) => {
+        const next = (counts.get(key) ?? 0) + 1;
+        counts.set(key, next);
+        return { success: next <= limit };
+      }),
+    };
+  };
+
+  const fromIp = (ip: string, headers: Record<string, string> = {}) =>
+    post(validBody, { 'CF-Connecting-IP': ip, ...headers });
+
+  it('returns 429 RATE_LIMITED with Retry-After once an IP goes over the limit', async () => {
+    const limiter = fakeLimiter(2);
+    const fetchMock = geminiOk('x');
+    const limitedEnv = { ...env, RATE_LIMITER: limiter };
+
+    expect((await handleProxyRequest(fromIp('1.1.1.1'), limitedEnv, fetchMock)).status).toBe(200);
+    expect((await handleProxyRequest(fromIp('1.1.1.1'), limitedEnv, fetchMock)).status).toBe(200);
+    const blocked = await handleProxyRequest(fromIp('1.1.1.1'), limitedEnv, fetchMock);
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('60');
+    const body = await blocked.json();
+    expect(body.error.code).toBe('RATE_LIMITED');
+    expect(body.error.message).toMatch(/Retry in 60 seconds/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(limiter.limit).toHaveBeenLastCalledWith({ key: 'ip:1.1.1.1' });
+  });
+
+  it('counts each IP separately', async () => {
+    const limitedEnv = { ...env, RATE_LIMITER: fakeLimiter(1) };
+    expect((await handleProxyRequest(fromIp('1.1.1.1'), limitedEnv, geminiOk('x'))).status).toBe(
+      200,
+    );
+    expect((await handleProxyRequest(fromIp('2.2.2.2'), limitedEnv, geminiOk('x'))).status).toBe(
+      200,
+    );
+    expect((await handleProxyRequest(fromIp('1.1.1.1'), limitedEnv, geminiOk('x'))).status).toBe(
+      429,
+    );
+  });
+
+  it('limits before checking the token, so token guessing is throttled too', async () => {
+    const limitedEnv = { ...env, PROXY_TOKEN: 'secret', RATE_LIMITER: fakeLimiter(1) };
+    const wrong = { Authorization: 'Bearer guess' };
+    expect((await handleProxyRequest(fromIp('3.3.3.3', wrong), limitedEnv)).status).toBe(401);
+    expect((await handleProxyRequest(fromIp('3.3.3.3', wrong), limitedEnv)).status).toBe(429);
+  });
+
+  it('keeps CORS headers on a 429 so the extension can read the error', async () => {
+    const limitedEnv = {
+      ...env,
+      ALLOWED_ORIGINS: 'chrome-extension://abc',
+      RATE_LIMITER: fakeLimiter(0),
+    };
+    const res = await handleProxyRequest(
+      fromIp('4.4.4.4', { Origin: 'chrome-extension://abc' }),
+      limitedEnv,
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('chrome-extension://abc');
+  });
+
+  it('does not count health checks or CORS preflights', async () => {
+    const limiter = fakeLimiter(0);
+    const limitedEnv = { ...env, RATE_LIMITER: limiter };
+    const health = await handleProxyRequest(
+      new Request('http://proxy.test/api/health'),
+      limitedEnv,
+    );
+    const preflight = await handleProxyRequest(
+      new Request('http://proxy.test/api/generate', { method: 'OPTIONS' }),
+      limitedEnv,
+    );
+    expect(health.status).toBe(200);
+    expect(preflight.status).toBe(204);
+    expect(limiter.limit).not.toHaveBeenCalled();
+  });
+
+  it('lets requests through when the limiter itself fails', async () => {
+    const broken: RateLimiter = {
+      limit: async () => {
+        throw new Error('limiter down');
+      },
+    };
+    const res = await handleProxyRequest(
+      fromIp('5.5.5.5'),
+      { ...env, RATE_LIMITER: broken },
+      geminiOk('x'),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('does not limit when no binding is configured (local dev)', async () => {
+    const fetchMock = geminiOk('x');
+    for (let i = 0; i < 5; i += 1) {
+      expect((await handleProxyRequest(fromIp('6.6.6.6'), env, fetchMock)).status).toBe(200);
+    }
   });
 });
 

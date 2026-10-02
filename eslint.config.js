@@ -9,6 +9,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      '.wrangler/**',
       'extension/dist/**',
       'node_modules/**',
       'coverage/**',

@@ -11,6 +11,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "deploy": "npm run build && npx --yes wrangler@4 deploy",
+    "deploy:dry-run": "npm run build && npx --yes wrangler@4 deploy --dry-run --outdir .wrangler/dry-run",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
