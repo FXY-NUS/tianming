@@ -31,6 +31,7 @@ export default defineConfig(({ mode }) => {
       include: [
         'src/**/*.{test,spec}.{ts,tsx}',
         'services/**/*.{test,spec}.{ts,tsx}',
+        'extension/**/*.{test,spec}.{ts,tsx}',
         'server/**/*.{test,spec}.{ts,tsx}',
       ],
     },
