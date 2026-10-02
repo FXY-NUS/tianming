@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_COPY_KIT_ITEMS,
+  MAX_COPY_KIT_VALUE_LENGTH,
   MAX_TRIAGE_CARDS,
   parseAppMessage,
+  parseCopyKitRequest,
   parseExtensionMessage,
   parseTriageRequest,
 } from './extensionProtocol';
@@ -95,5 +98,55 @@ describe('triage messages', () => {
       requestId: 'r1',
       results: [{ id: '1', verdict: 'pass', reason: '82 分' }],
     });
+  });
+});
+
+describe('copy kit messages', () => {
+  it('parses a copy kit request and drops a malformed job', () => {
+    expect(
+      parseCopyKitRequest({
+        source: 'tianming-extension',
+        type: 'copy-kit-request',
+        requestId: 'r1',
+        job: { title: 'Analyst', company: 'Acme', extra: 'x' },
+      }),
+    ).toEqual({
+      source: 'tianming-extension',
+      type: 'copy-kit-request',
+      requestId: 'r1',
+      job: { title: 'Analyst', company: 'Acme' },
+    });
+    expect(
+      parseCopyKitRequest({
+        source: 'tianming-extension',
+        type: 'copy-kit-request',
+        requestId: 'r2',
+        job: { title: 42 },
+      }),
+    ).toEqual({ source: 'tianming-extension', type: 'copy-kit-request', requestId: 'r2' });
+    expect(parseCopyKitRequest({ source: 'tianming-app', type: 'copy-kit-request' })).toBeNull();
+  });
+
+  it('parses copy kit results, keeping only well-formed, non-empty items within limits', () => {
+    const good = { id: 'profile.email', group: 'profile', label: 'Email', value: 'a@b.c' };
+    const parsed = parseAppMessage({
+      source: 'tianming-app',
+      type: 'copy-kit-result',
+      requestId: 'r1',
+      items: [
+        good,
+        { ...good, id: 'bad-group', group: 'secrets' },
+        { ...good, id: 'blank', value: '  ' },
+        { ...good, id: 'huge', value: 'x'.repeat(MAX_COPY_KIT_VALUE_LENGTH + 1) },
+        ...Array.from({ length: MAX_COPY_KIT_ITEMS }, (_, i) => ({ ...good, id: `n${i}` })),
+      ],
+    });
+    expect(parsed?.type).toBe('copy-kit-result');
+    if (parsed?.type !== 'copy-kit-result') return;
+    expect(parsed.items).toHaveLength(MAX_COPY_KIT_ITEMS);
+    expect(parsed.items[0]).toEqual(good);
+    expect(parsed.items.some((item) => ['bad-group', 'blank', 'huge'].includes(item.id))).toBe(
+      false,
+    );
   });
 });

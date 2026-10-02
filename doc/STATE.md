@@ -55,3 +55,9 @@
 - `wrangler.jsonc`：一个 Worker 托管网页 `dist/` 和 `/api/*`（同源）；按 IP 限流 20 次 / 分钟，超限 429 `RATE_LIMITED`。
 - `npm run deploy` / `npm run deploy:dry-run`；密钥只走 `wrangler secret put`。
 - 下一步（Flora 亲手）：按 `doc/backend-proxy.md` §7.2 登录 wrangler → 部署 → 设两个 secret → §7.3 验证。
+
+## Phase 6.5 · 投递页复制侧栏（并行线程 · 2026-10-02）
+
+- 在任意投递页点扩展图标，右侧出现可收起的「天命 · 复制助手」侧栏：投递档案、当前简历要点、已存回答（LinkedIn 详情页另有邮件正文），每条一个复制按钮。只复制，不 autofill、不提交（D11 L3）。
+- 内容每次打开时经 bridge 向打开着的天命页面要（`services/copyKit.ts` 拼装），只在侧栏内存里，关闭即丢，不进 `chrome.storage`（D6）；天命没开就提示先打开。分支 `feat/apply-copy-helper-iy3q2m`，叠在扩展评分分支上。
+- 下一步：真浏览器里在 Greenhouse / Workday / LinkedIn Easy Apply 各点一次，看侧栏和复制是否被页面拦。
