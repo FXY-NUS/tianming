@@ -21,3 +21,13 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build:extension
+        env:
+          # 部署后在仓库 Settings → Variables 里设 TIANMING_APP_URL，扩展默认就指向线上天命；没设则是 localhost:3000。
+          TIANMING_APP_URL: ${{ vars.TIANMING_APP_URL }}
+      # 扩展安装包：Actions 运行页底部的 Artifacts 里下载，解压后在 chrome://extensions 加载，不需要 npm。
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tianming-extension-${{ github.sha }}
+          path: extension/dist/
+          if-no-files-found: error
+          retention-days: 90
