@@ -138,11 +138,125 @@ Vite 插件在 Node 侧转发。右上角的"Key"按钮和"未激活"遮罩在�
 | 静态资源 | `dist/`，找不到的路径回 `index.html` | `assets` |
 | 限流 | 每个 IP 每 60 秒 20 次 `/api/generate` | `ratelimits[0].simple.limit` |
 | 跨域白名单 | 默认空（同源不需要） | `vars.ALLOWED_ORIGINS` |
-| `GEMINI_API_KEY` / `PROXY_TOKEN` | 只存在 Cloudflare | `wrangler secret put`，见 7.2 |
+| `GEMINI_API_KEY` / `PROXY_TOKEN` | 只存在 GitHub secrets 和 Cloudflare | 7.2 B（或 7.7 的 `wrangler secret put`） |
+| 自有域名 | 默认不挂 | 仓库变量 `TIANMING_CUSTOM_DOMAIN`，见 7.2 C |
 
-wrangler 没装进依赖，`npm run deploy` 用 `npx wrangler@4` 现拉，第一次会慢一点。
+wrangler 没装进依赖，部署工作流和 `npm run deploy` 都用 `npx wrangler@4` 现拉。
 
-### 7.2 Flora 要亲手做的步骤
+### 7.2 点击部署（推荐，全程在网页上点）
+
+部署由 GitHub Actions 工作流 `.github/workflows/deploy.yml` 完成。它**只能手动触发**，合并到 main 不会自动上线；
+运行时输入框里要填 `deploy` 才会真的部署，填别的或空着就什么都不做。secrets 没配齐时它会写明缺什么然后跳过，不会变红。
+
+**A. Cloudflare：拿到 API Token 和 Account ID**
+
+1. 登录 dash.cloudflare.com，左侧点 **Workers & Pages**。第一次进来如果让你选 workers.dev 子域名，随便取一个确认即可。
+2. 右上角头像 → **My Profile** → 左侧 **API Tokens** → **Create Token**。
+3. 在模板列表里找 **Edit Cloudflare Workers**，点它右边的 **Use template**。
+4. 页面上：
+   - **Account Resources**：选 Include → 你的账号。
+   - **Zone Resources**：不挂自有域名就选 Include → All zones；要挂自有域名（见 C）就选 Include → Specific zone → 你的域名。
+   - 要挂自有域名时，在 **Permissions** 里再点 **+ Add more**，加一行 **Zone · DNS · Edit**。
+   - 其它保持模板默认。
+5. 点 **Continue to summary** → **Create Token**，复制显示出来的 token（只显示这一次）。
+6. 回到 **Workers & Pages** 首页，右侧栏有 **Account ID**，点复制。（也可以看浏览器地址栏 `dash.cloudflare.com/` 后面那串。）
+
+**B. GitHub：把密钥放进仓库 secrets**
+
+打开仓库 → **Settings** → 左侧 **Secrets and variables** → **Actions** → **Secrets** 标签 → **New repository secret**，逐个添加：
+
+| Name | 填什么 | 必填 |
+|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | A 第 5 步复制的 token | 是 |
+| `CLOUDFLARE_ACCOUNT_ID` | A 第 6 步复制的 Account ID | 是 |
+| `GEMINI_API_KEY` | 你的 Gemini Key | 是 |
+| `PROXY_TOKEN` | 任意一串随机字符（密码管理器生成 32 位） | 否，见下 |
+
+`PROXY_TOKEN` 设了以后网页会带着它，所以它会出现在网页 JS 里，打开网页的人都能看到；它挡的是不打开网页、
+直接扫接口的脚本，兜底靠 7.4 的限流。网页要公开给别人用时可以不设。
+
+**C. 可选：挂到自己的 Cloudflare 域名**
+
+前提是这个域名已经在你的 Cloudflare 账号里（Websites 列表里状态是 Active）。
+
+1. 想好一个**还没被占用**的子域名，例如 `tianming.<你的域名>`。这个名字在 DNS 里不能已有记录，否则部署会报冲突。
+2. 仓库 **Settings** → **Secrets and variables** → **Actions** → **Variables** 标签 → **New repository variable**：
+   Name 填 `TIANMING_CUSTOM_DOMAIN`，Value 填上面的子域名（不带 `https://`，不带结尾 `/`）。
+3. A 第 4 步的 token 需要包含这个域名和 **Zone · DNS · Edit** 权限。
+
+部署时工作流会自动把 Worker 挂上这个域名，并由 Cloudflare 自动签发证书；`*.workers.dev` 网址照样保留。
+域名只存在仓库变量里，代码和 `wrangler.jsonc` 里都没有写死。
+
+**D. 部署**
+
+1. 仓库顶部 **Actions** → 左侧 **Deploy** → 右侧 **Run workflow**。
+2. 分支选 `main`，输入框填 `deploy`，点绿色 **Run workflow**。
+3. 等它跑完（一两分钟），点进这次运行，页面下方 **Summary** 里会写「已部署」和网址。
+   如果写的是「跳过部署」，按它说的补 secrets 再跑一次。
+
+**E. 记下网址**
+
+**Settings** → **Secrets and variables** → **Actions** → **Variables** → **New repository variable**：
+Name 填 `TIANMING_APP_URL`，Value 填 D 第 3 步的网址（挂了自有域名就填 `https://<你的子域名>`），不带结尾 `/`。
+之后每次部署都用它做健康检查；扩展以后指向线上网页时也从这里取。
+
+以后更新线上版本：合并代码后，重复 D 即可。
+
+### 7.3 怎么验证
+
+把 `$BASE` 换成部署得到的网址（7.2 D 第 3 步，或 7.7 第 4 步）。PowerShell 里要写 `curl.exe`（`curl` 在 PowerShell 里是别的命令的别名）。
+
+1. **健康检查**：浏览器打开 `$BASE/api/health`，应看到 `{"ok":true,"version":"v1"}`。
+2. **网页**：打开 `$BASE`，导入或粘贴一个 JD，跑一次批量初筛，能出分说明 Key 和转发都通了。
+   刷新任意子路径（如 `$BASE/anything`）也应回到网页，不是 404。
+3. **Key 没进网页包**：浏览器开发者工具 → Sources，全局搜 `AIza`（Gemini Key 的前缀），应搜不到。
+4. **限流**：连发 25 次空请求（空请求在校验阶段就被拒，不会调用 Gemini、不花额度）：
+
+   ```bash
+   for i in $(seq 1 25); do curl -s -o /dev/null -w "%{http_code} " -X POST -H "Content-Type: application/json" -d "{}" $BASE/api/generate; done
+   ```
+
+   PowerShell 版：
+
+   ```powershell
+   1..25 | % { curl.exe -s -o NUL -w "%{http_code} " -X POST -H "Content-Type: application/json" -d "{}" "$BASE/api/generate" }
+   ```
+
+   前约 20 个是 `401`（设了口令）或 `400`，之后变成 `429`。Cloudflare 的计数按机房、略有延迟，多放行一两个属正常。
+   等 1 分钟后再请求应恢复。
+
+### 7.4 限流方案说明
+
+- 用 Cloudflare Workers 自带的 Rate Limiting 绑定（`wrangler.jsonc` 的 `ratelimits`），不需要 KV / Durable Object，
+  免费套餐可用。计数 key 是 `CF-Connecting-IP`，只看 IP，不读请求体。
+- 只对 `POST /api/generate` 计数；`/api/health` 和 CORS 预检不计。限流在验口令之前，猜口令也会被限。
+- 超限返回 `429` + `{ error: { code: 'RATE_LIMITED', ... } }` + `Retry-After: 60`；前端提示「请求太频繁，等 1 分钟」。
+- 限流服务自身出错时放行（宁可短暂不限，也不让所有人一起失败）。本地 `npm run dev` 没有这个绑定，不限流。
+- 20 次 / 分钟的依据：批量初筛一次只发 1 个请求，深审和简历解析各 1 个，正常使用远到不了。扩展上线后如果
+  每张卡片单独调用，再按实际调高 `limit`（`period` 只能是 10 或 60）。
+
+### 7.5 隐私（D6）
+
+- 代理不存任何东西：没有 KV / 数据库绑定，代码里没有 `console.log`，请求体只在内存里转发给 Gemini。
+- `wrangler.jsonc` 没开 `observability`（Workers Logs）。即使以后开，也只会记录请求元数据（路径、状态码、耗时），
+  不会有请求正文；改动时别在 `server/` 里加打印请求体的日志。
+- `npx wrangler@4 tail` 能看实时请求元数据，排错用，同样不含正文。
+
+### 7.6 之后的维护
+
+- **更新**：合并新代码后，Actions → Deploy → Run workflow（填 `deploy`）。命令行方式是 `git pull` 后 `npm run deploy`。
+- **回滚**：Cloudflare 控制台 Workers & Pages → tianming → **Deployments**，在旧版本右侧菜单选 **Rollback**；
+  命令行是 `npx wrangler@4 rollback`。
+- **换 Key / 口令**：改 GitHub 里对应的 secret 后重新运行部署，工作流每次都会重新上传。
+  要**去掉** `PROXY_TOKEN` 时，除了删 GitHub secret，还要在控制台 tianming → Settings → Variables and Secrets 里删掉它，
+  否则线上仍要求口令、网页会报 401。
+- **扩展接入**：把 `chrome-extension://<扩展 id>` 写进 `wrangler.jsonc` 的 `vars.ALLOWED_ORIGINS`（逗号分隔）再部署。
+  别在 Cloudflare 控制台里改这个变量，下次 `deploy` 会被 `wrangler.jsonc` 覆盖。
+- **自定义域名**：优先用 7.2 C 的仓库变量，这样每次部署都会带上。也可以在控制台 tianming → Settings → Domains & Routes 手动添加，同源结构不变。
+
+### 7.7 备选：本地命令行部署
+
+不想用 7.2 的按钮时，也可以在自己电脑上部署。
 
 在本地仓库根目录（已 `git pull` 到含本节的 main）执行。命令在 PowerShell 和 Git Bash 里都一样。
 
@@ -194,51 +308,3 @@ wrangler 没装进依赖，`npm run deploy` 用 `npx wrangler@4` 现拉，第一
 
 7. **给 Key 设上限**（推荐）：在 Google AI Studio / Google Cloud 控制台给这个 Key 所在项目设每日配额或预算提醒。
    代理限流是按 IP 的，多 IP 刷量时最后一道闸在 Google 那边。
-
-### 7.3 怎么验证
-
-把 `$BASE` 换成第 4 步拿到的地址。PowerShell 里要写 `curl.exe`（`curl` 在 PowerShell 里是别的命令的别名）。
-
-1. **健康检查**：浏览器打开 `$BASE/api/health`，应看到 `{"ok":true,"version":"v1"}`。
-2. **网页**：打开 `$BASE`，导入或粘贴一个 JD，跑一次批量初筛，能出分说明 Key 和转发都通了。
-   刷新任意子路径（如 `$BASE/anything`）也应回到网页，不是 404。
-3. **Key 没进网页包**：浏览器开发者工具 → Sources，全局搜 `AIza`（Gemini Key 的前缀），应搜不到。
-4. **限流**：连发 25 次空请求（空请求在校验阶段就被拒，不会调用 Gemini、不花额度）：
-
-   ```bash
-   for i in $(seq 1 25); do curl -s -o /dev/null -w "%{http_code} " -X POST -H "Content-Type: application/json" -d "{}" $BASE/api/generate; done
-   ```
-
-   PowerShell 版：
-
-   ```powershell
-   1..25 | % { curl.exe -s -o NUL -w "%{http_code} " -X POST -H "Content-Type: application/json" -d "{}" "$BASE/api/generate" }
-   ```
-
-   前约 20 个是 `401`（设了口令）或 `400`，之后变成 `429`。Cloudflare 的计数按机房、略有延迟，多放行一两个属正常。
-   等 1 分钟后再请求应恢复。
-
-### 7.4 限流方案说明
-
-- 用 Cloudflare Workers 自带的 Rate Limiting 绑定（`wrangler.jsonc` 的 `ratelimits`），不需要 KV / Durable Object，
-  免费套餐可用。计数 key 是 `CF-Connecting-IP`，只看 IP，不读请求体。
-- 只对 `POST /api/generate` 计数；`/api/health` 和 CORS 预检不计。限流在验口令之前，猜口令也会被限。
-- 超限返回 `429` + `{ error: { code: 'RATE_LIMITED', ... } }` + `Retry-After: 60`；前端提示「请求太频繁，等 1 分钟」。
-- 限流服务自身出错时放行（宁可短暂不限，也不让所有人一起失败）。本地 `npm run dev` 没有这个绑定，不限流。
-- 20 次 / 分钟的依据：批量初筛一次只发 1 个请求，深审和简历解析各 1 个，正常使用远到不了。扩展上线后如果
-  每张卡片单独调用，再按实际调高 `limit`（`period` 只能是 10 或 60）。
-
-### 7.5 隐私（D6）
-
-- 代理不存任何东西：没有 KV / 数据库绑定，代码里没有 `console.log`，请求体只在内存里转发给 Gemini。
-- `wrangler.jsonc` 没开 `observability`（Workers Logs）。即使以后开，也只会记录请求元数据（路径、状态码、耗时），
-  不会有请求正文；改动时别在 `server/` 里加打印请求体的日志。
-- `npx wrangler@4 tail` 能看实时请求元数据，排错用，同样不含正文。
-
-### 7.6 之后的维护
-
-- **更新**：合并新代码后在本地 `git pull`，再 `npm run deploy`。
-- **回滚**：`npx wrangler@4 rollback`，回到上一个版本。
-- **扩展接入**：把 `chrome-extension://<扩展 id>` 写进 `wrangler.jsonc` 的 `vars.ALLOWED_ORIGINS`（逗号分隔）再部署。
-  别在 Cloudflare 控制台里改这个变量，下次 `deploy` 会被 `wrangler.jsonc` 覆盖。
-- **自定义域名**：控制台 Workers → tianming → Settings → Domains & Routes 添加，同源结构不变。
