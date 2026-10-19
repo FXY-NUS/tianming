@@ -1,5 +1,16 @@
 # Tianming · 天命
 
+## English Summary
+
+Tianming (“mandate”) is a decision-support tool for job seekers who freeze in front of a wall of postings: it shows one job card at a time, scores the fit against your resume, and pushes you to decide. The product UI and most code comments are in Chinese because the target users are Chinese-speaking job seekers for now, but I do consider internationalise the project to English as well in the future; the code, tests and tooling are TypeScript.
+
+Architecture: two layers. An LLM (Gemini API) extracts structured evidence from job descriptions and resumes; a deterministic, explainable three-pass rubric then computes the match score in plain code, so there is no black-box LLM scoring.
+Stack: React + TypeScript (Vite); a browser extension that captures postings; a multi-format resume parser (PDF / DOCX / TXT).
+Quality: unit tests, extension end-to-end tests, lint and typecheck, pre-commit hooks, CI deployment; 49 merged pull requests.
+Run: npm install && npm run dev (needs a Gemini API key, see .env.example).
+
+
+
 > **100 个岗位你只能投 1 个。  
 > 我们让你看清那 1 个。**
 
