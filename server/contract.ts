@@ -11,7 +11,10 @@ export const PROXY_CONTRACT_VERSION = 'v1';
 export const GENERATE_PATH = '/api/generate';
 export const HEALTH_PATH = '/api/health';
 
-/** 代理只放行这些模型，防止被当成任意 Gemini 网关滥用。 */
+/**
+ * 代理只放行这两个名字，防止被当成任意模型网关滥用。
+ * 它们同时是「快 / 强」两档的代号：服务端配了 DeepSeek / Kimi 时换成对应模型（server/providers.ts）。
+ */
 export const ALLOWED_MODELS = ['gemini-3-flash-preview', 'gemini-3-pro-preview'] as const;
 export type AllowedModel = (typeof ALLOWED_MODELS)[number];
 
@@ -57,12 +60,16 @@ export interface GenerateRequest {
 
 export interface GenerateResponse {
   text: string | null;
+  /** 实际调用的模型名，例如 deepseek-chat。 */
   model: string;
+  /** 实际调用的服务商：gemini | deepseek | kimi。 */
+  provider?: string;
 }
 
 export type ProxyErrorCode =
   | 'BAD_REQUEST'
   | 'MODEL_NOT_ALLOWED'
+  | 'UNSUPPORTED_INPUT'
   | 'PAYLOAD_TOO_LARGE'
   | 'UNAUTHORIZED'
   | 'ORIGIN_NOT_ALLOWED'

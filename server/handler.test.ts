@@ -34,7 +34,7 @@ describe('handleProxyRequest', () => {
   it('answers the health check', async () => {
     const res = await handleProxyRequest(new Request('http://proxy.test/api/health'), env);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, version: 'v1' });
+    expect(await res.json()).toEqual({ ok: true, version: 'v1', provider: 'gemini' });
   });
 
   it('forwards a valid request to Gemini with the server key and returns the text', async () => {
@@ -42,7 +42,11 @@ describe('handleProxyRequest', () => {
     const res = await handleProxyRequest(post(validBody), env, fetchMock);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ text: '{"ok":true}', model: 'gemini-3-flash-preview' });
+    expect(await res.json()).toEqual({
+      text: '{"ok":true}',
+      model: 'gemini-3-flash-preview',
+      provider: 'gemini',
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(
@@ -341,5 +345,143 @@ describe('toGeminiRestBody / extractText', () => {
     ).toBe('answer');
     expect(extractText({ candidates: [] })).toBeNull();
     expect(extractText({})).toBeNull();
+  });
+});
+
+describe('handleProxyRequest · provider switch', () => {
+  const chatOk = (content: string, finishReason = 'stop') =>
+    vi.fn<FetchLike>(
+      async () =>
+        new Response(
+          JSON.stringify({ choices: [{ message: { content }, finish_reason: finishReason }] }),
+          { status: 200 },
+        ),
+    );
+
+  it('routes to DeepSeek chat/completions with its own key and reports the real model', async () => {
+    const fetchMock = chatOk('{"ok":true}');
+    const res = await handleProxyRequest(
+      post(validBody),
+      { LLM_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'ds-secret' },
+      fetchMock,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      text: '{"ok":true}',
+      model: 'deepseek-chat',
+      provider: 'deepseek',
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.deepseek.com/chat/completions');
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer ds-secret');
+    const sent = JSON.parse(init!.body as string);
+    expect(sent.model).toBe('deepseek-chat');
+    expect(sent.response_format).toEqual({ type: 'json_object' });
+    expect(sent.messages[0].role).toBe('system');
+    expect(sent.messages[0].content).toContain('be brief');
+    expect(sent.messages[1]).toEqual({ role: 'user', content: 'hello' });
+  });
+
+  it('uses Kimi with base URL and model overrides', async () => {
+    const fetchMock = chatOk('done');
+    const res = await handleProxyRequest(
+      post({ ...validBody, model: 'gemini-3-pro-preview', config: undefined }),
+      {
+        LLM_PROVIDER: 'Kimi',
+        KIMI_API_KEY: 'kimi-secret',
+        LLM_BASE_URL: 'https://api.moonshot.ai/v1/',
+        LLM_MODEL_STRONG: 'kimi-k2-thinking',
+      },
+      fetchMock,
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).model).toBe('kimi-k2-thinking');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.moonshot.ai/v1/chat/completions');
+  });
+
+  it('unwraps array results that JSON mode had to wrap in an object', async () => {
+    const fetchMock = chatOk('{"items":[{"id":"a"}]}');
+    const res = await handleProxyRequest(
+      post({
+        ...validBody,
+        config: { responseMimeType: 'application/json', responseSchema: { type: 'ARRAY' } },
+      }),
+      { LLM_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'k' },
+      fetchMock,
+    );
+    expect((await res.json()).text).toBe('[{"id":"a"}]');
+  });
+
+  it('reports a missing key for the chosen provider without calling upstream', async () => {
+    const fetchMock = chatOk('x');
+    const res = await handleProxyRequest(
+      post(validBody),
+      { LLM_PROVIDER: 'deepseek', GEMINI_API_KEY: 'only-gemini' },
+      fetchMock,
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error.code).toBe('SERVER_MISCONFIGURED');
+    expect(body.error.message).toContain('DEEPSEEK_API_KEY');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown provider name', async () => {
+    const res = await handleProxyRequest(post(validBody), { LLM_PROVIDER: 'openai' }, chatOk('x'));
+    expect(res.status).toBe(500);
+    expect((await res.json()).error.code).toBe('SERVER_MISCONFIGURED');
+  });
+
+  it('refuses file input for text-only providers with UNSUPPORTED_INPUT', async () => {
+    const fetchMock = chatOk('x');
+    const res = await handleProxyRequest(
+      post({
+        model: 'gemini-3-pro-preview',
+        contents: [{ parts: [{ inlineData: { mimeType: 'image/png', data: 'AAAA' } }] }],
+      }),
+      { LLM_PROVIDER: 'kimi', KIMI_API_KEY: 'k' },
+      fetchMock,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe('UNSUPPORTED_INPUT');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('maps upstream 429 and truncated output to proxy errors', async () => {
+    const busy = vi.fn<FetchLike>(
+      async () => new Response(JSON.stringify({ error: { message: 'busy' } }), { status: 429 }),
+    );
+    const limited = await handleProxyRequest(
+      post(validBody),
+      { LLM_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'k' },
+      busy,
+    );
+    expect(limited.status).toBe(429);
+    expect((await limited.json()).error.code).toBe('RESOURCE_EXHAUSTED');
+
+    const cut = await handleProxyRequest(
+      post(validBody),
+      { LLM_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'k' },
+      chatOk('{"partial":', 'length'),
+    );
+    expect(cut.status).toBe(502);
+    expect((await cut.json()).error.code).toBe('UPSTREAM_ERROR');
+  });
+
+  it('never leaks a DeepSeek key into an upstream error response', async () => {
+    const denied = vi.fn<FetchLike>(
+      async () =>
+        new Response(JSON.stringify({ error: { message: 'Authentication Fails' } }), {
+          status: 401,
+        }),
+    );
+    const res = await handleProxyRequest(
+      post(validBody),
+      { LLM_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'ds-secret' },
+      denied,
+    );
+    expect(res.status).toBe(502);
+    expect(await res.text()).not.toContain('ds-secret');
   });
 });

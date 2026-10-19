@@ -1,7 +1,8 @@
 /**
  * 平台无关的代理处理函数：输入标准 Request，输出标准 Response。
  * Cloudflare Worker（server/worker.ts）和 Vite dev/preview 中间件（server/vitePlugin.ts）共用。
- * Gemini API Key 只在这里读取（env.GEMINI_API_KEY），永远不回传给调用方。
+ * 模型 Key 只在这里读取（env.GEMINI_API_KEY / DEEPSEEK_API_KEY / KIMI_API_KEY），永远不回传给调用方。
+ * 用哪家由 env.LLM_PROVIDER 决定，见 server/providers.ts。
  */
 import {
   ALLOWED_CONFIG_KEYS,
@@ -19,9 +20,17 @@ import {
   type ProxyErrorBody,
   type ProxyErrorCode,
 } from './contract';
+import {
+  extractOpenAiCompatText,
+  resolveProvider,
+  toOpenAiCompatBody,
+  TruncatedOutputError,
+  UnsupportedInputError,
+  type ProviderEnv,
+  type ResolvedProvider,
+} from './providers';
 
-export interface ProxyEnv {
-  GEMINI_API_KEY?: string;
+export interface ProxyEnv extends ProviderEnv {
   /** 逗号分隔的跨域白名单，例如 "https://tianming.example.com,chrome-extension://abc"。同源请求无需配置。 */
   ALLOWED_ORIGINS?: string;
   /** 可选共享口令；设置后请求必须带 Authorization: Bearer <token>。 */
@@ -34,8 +43,6 @@ export interface ProxyEnv {
 export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;
 }
-
-const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -71,7 +78,11 @@ export async function handleProxyRequest(
       if (request.method !== 'GET') {
         throw new RequestError(405, 'METHOD_NOT_ALLOWED', 'Use GET');
       }
-      return withCors(json(200, { ok: true, version: PROXY_CONTRACT_VERSION }), corsOrigin);
+      const provider = resolveProvider(env, 'gemini-3-flash-preview');
+      return withCors(
+        json(200, { ok: true, version: PROXY_CONTRACT_VERSION, provider: provider?.id ?? null }),
+        corsOrigin,
+      );
     }
 
     if (url.pathname !== GENERATE_PATH) {
@@ -85,13 +96,27 @@ export async function handleProxyRequest(
     await checkRateLimit(request, env.RATE_LIMITER);
     checkToken(request, env.PROXY_TOKEN);
 
-    const apiKey = env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new RequestError(500, 'SERVER_MISCONFIGURED', 'GEMINI_API_KEY is not set on the proxy');
+    const body = validateGenerateRequest(await readJsonBody(request));
+    const provider = resolveProvider(env, body.model);
+    if (!provider) {
+      throw new RequestError(
+        500,
+        'SERVER_MISCONFIGURED',
+        `LLM_PROVIDER "${env.LLM_PROVIDER}" is not one of: gemini, deepseek, kimi`,
+      );
+    }
+    if (!provider.apiKey) {
+      throw new RequestError(
+        500,
+        'SERVER_MISCONFIGURED',
+        `${provider.keyVar} is not set on the proxy`,
+      );
     }
 
-    const body = validateGenerateRequest(await readJsonBody(request));
-    const result = await callGemini(body, apiKey, fetchImpl);
+    const result =
+      provider.id === 'gemini'
+        ? await callGemini(body, provider, fetchImpl)
+        : await callOpenAiCompat(body, provider, fetchImpl);
     return withCors(json(200, result), corsOrigin);
   } catch (err) {
     if (err instanceof RequestError) {
@@ -270,12 +295,12 @@ export function extractText(data: GeminiRestResponse): string | null {
 
 async function callGemini(
   req: GenerateRequest,
-  apiKey: string,
+  provider: ResolvedProvider,
   fetchImpl: FetchLike,
 ): Promise<GenerateResponse> {
-  const upstream = await fetchImpl(`${GEMINI_ENDPOINT}/${req.model}:generateContent`, {
+  const upstream = await fetchImpl(`${provider.baseUrl}/${provider.model}:generateContent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': provider.apiKey ?? '' },
     body: JSON.stringify(toGeminiRestBody(req)),
   });
 
@@ -292,7 +317,51 @@ async function callGemini(
     );
   }
 
-  return { text: extractText(data), model: req.model };
+  return { text: extractText(data), model: provider.model, provider: provider.id };
+}
+
+/** DeepSeek / Kimi：兼容 OpenAI 的 chat/completions。 */
+async function callOpenAiCompat(
+  req: GenerateRequest,
+  provider: ResolvedProvider,
+  fetchImpl: FetchLike,
+): Promise<GenerateResponse> {
+  let compat;
+  try {
+    compat = toOpenAiCompatBody(req, provider);
+  } catch (err) {
+    if (err instanceof UnsupportedInputError) {
+      throw new RequestError(400, 'UNSUPPORTED_INPUT', err.message);
+    }
+    throw err;
+  }
+
+  const upstream = await fetchImpl(`${provider.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
+    body: JSON.stringify(compat.body),
+  });
+
+  const data = (await upstream.json().catch(() => ({}))) as Parameters<
+    typeof extractOpenAiCompatText
+  >[0];
+  if (!upstream.ok) {
+    const detail = data.error?.message ?? upstream.statusText;
+    if (upstream.status === 429) {
+      throw new RequestError(429, 'RESOURCE_EXHAUSTED', `${provider.id} 429: ${detail}`);
+    }
+    throw new RequestError(502, 'UPSTREAM_ERROR', `${provider.id} ${upstream.status}: ${detail}`);
+  }
+
+  try {
+    const text = extractOpenAiCompatText(data, compat.unwrapArray);
+    return { text, model: provider.model, provider: provider.id };
+  } catch (err) {
+    if (err instanceof TruncatedOutputError) {
+      throw new RequestError(502, 'UPSTREAM_ERROR', `${provider.id}: ${err.message}`);
+    }
+    throw err;
+  }
 }
 
 function json(status: number, body: unknown): Response {

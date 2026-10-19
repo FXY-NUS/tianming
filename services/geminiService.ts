@@ -45,8 +45,8 @@ export const batchScreenJobs = async (
 
   return parsed.flatMap((raw) => {
     const result = scoreBatchScreenRecord(raw, jobs, ctx, {
-      providerId: 'gemini',
-      modelId: FLASH_MODEL_ID,
+      providerId: response.provider,
+      modelId: response.model,
     });
     return result ? [result] : [];
   });
@@ -66,8 +66,8 @@ export const deepAuditJob = async (job: Job, ctx: UserContext) => {
 
   const parsed = safeParse(response.text);
   const result = scoreDeepAuditRecord(parsed, job, ctx, {
-    providerId: 'gemini',
-    modelId: PRO_MODEL_ID,
+    providerId: response.provider,
+    modelId: response.model,
   });
 
   if (!result) throw new Error('Pro Audit Parse Error');

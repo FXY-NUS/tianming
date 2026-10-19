@@ -46,7 +46,8 @@ schema / thinkingBudget 等一个字没改。
 成功 `200`：
 
 ```ts
-{ text: string | null; model: string }   // text 与 SDK 的 response.text 等价（已去掉 thought 片段）
+{ text: string | null; model: string; provider?: string }   // text 与 SDK 的 response.text 等价（已去掉 thought 片段）
+                                                              // model / provider 是实际调用的模型和服务商（见 §3.1）
 ```
 
 失败：`{ error: { code, message } }`，HTTP 状态码与 `code` 对应：
@@ -55,18 +56,19 @@ schema / thinkingBudget 等一个字没改。
 |---|---|---|
 | 400 | `BAD_REQUEST` | 体不是 JSON / contents 空 / config 含白名单外字段 / thinkingBudget 超限 |
 | 400 | `MODEL_NOT_ALLOWED` | 模型不在白名单 |
+| 400 | `UNSUPPORTED_INPUT` | 服务端配的是只读文字的模型（DeepSeek / Kimi），请求里却带了文件 / 图片（`inlineData`） |
 | 401 | `UNAUTHORIZED` | 代理设了 `PROXY_TOKEN` 而请求没带 / 带错 `Authorization: Bearer` |
 | 403 | `ORIGIN_NOT_ALLOWED` | 跨域来源不在 `ALLOWED_ORIGINS` |
 | 404 / 405 | `NOT_FOUND` / `METHOD_NOT_ALLOWED` | 路由或方法不对 |
 | 413 | `PAYLOAD_TOO_LARGE` | 体超过 20 MB（简历 PDF base64 之上留了余量） |
 | 429 | `RESOURCE_EXHAUSTED` | Gemini 限额，前端照旧提示"等 1 分钟" |
 | 429 | `RATE_LIMITED` | 代理自己的限流：同一 IP 每分钟超过上限（部署默认 20 次）。带 `Retry-After: 60` 头 |
-| 500 | `SERVER_MISCONFIGURED` | 代理没配 `GEMINI_API_KEY` |
+| 500 | `SERVER_MISCONFIGURED` | 代理没配所选服务商的 Key，或 `LLM_PROVIDER` 不认识 |
 | 502 | `UPSTREAM_ERROR` | Gemini 其它错误，`message` 带原文 |
 
 请求头：`Content-Type: application/json`；设了口令时加 `Authorization: Bearer <PROXY_TOKEN>`。
 
-### `GET {base}/api/health` → `{ ok: true, version: 'v1' }`
+### `GET {base}/api/health` → `{ ok: true, version: 'v1', provider: 'gemini' | 'deepseek' | 'kimi' }`
 
 ### CORS
 
@@ -87,7 +89,10 @@ schema / thinkingBudget 等一个字没改。
 
 | 变量 | 侧 | 说明 |
 |---|---|---|
-| `GEMINI_API_KEY` | 服务端 | 唯一持有 Key 的地方 |
+| `LLM_PROVIDER` | 服务端 | `gemini`（缺省）/ `deepseek` / `kimi`，见 §3.1 |
+| `GEMINI_API_KEY` / `DEEPSEEK_API_KEY` / `KIMI_API_KEY` | 服务端 | 只需填所选那家；唯一持有 Key 的地方 |
+| `LLM_MODEL_FAST` / `LLM_MODEL_STRONG` | 服务端 | 可选，覆盖快 / 强两档的模型名 |
+| `LLM_BASE_URL` | 服务端 | 可选，覆盖 DeepSeek / Kimi 的接口地址（Kimi 国际站 Key 填 `https://api.moonshot.ai/v1`） |
 | `ALLOWED_ORIGINS` | 服务端 | 跨域白名单，逗号分隔 |
 | `PROXY_TOKEN` | 服务端 | 可选共享口令 |
 | `RATE_LIMITER` | 服务端 | Cloudflare 限流绑定，`wrangler.jsonc` 里配，不是环境变量；本地没有就不限流（§7.4） |
@@ -98,9 +103,39 @@ schema / thinkingBudget 等一个字没改。
 `VITE_GEMINI_API_KEY` 不再被读取。旧 `vite.config.ts` 里把 `GEMINI_API_KEY` `define` 进
 `process.env.*` 的两行已删（那两行会把 Key 打进 bundle，正是 D9 要堵的洞）。
 
+### 3.1 换模型（DeepSeek / Kimi）
+
+用哪家只由服务端决定，前端和扩展不用改：它们照旧传 `gemini-3-flash-preview` / `gemini-3-pro-preview`，
+代理把这两个名字当作「快 / 强」两档，换成所选服务商的模型。代码在 `server/providers.ts`。
+
+| `LLM_PROVIDER` | 快档（初筛 / 对话 / JD 证据） | 强档（深审 / 简历解析） | 接口 |
+|---|---|---|---|
+| `gemini`（缺省） | `gemini-3-flash-preview` | `gemini-3-pro-preview` | Gemini REST，行为与之前一致 |
+| `deepseek` | `deepseek-chat` | `deepseek-chat` | `https://api.deepseek.com/chat/completions` |
+| `kimi` | `kimi-k2-0905-preview` | `kimi-k2-0905-preview` | `https://api.moonshot.cn/v1/chat/completions` |
+
+DeepSeek / Kimi 走兼容 OpenAI 的接口，代理负责翻译：
+
+- `systemInstruction` → system 消息；`responseSchema` 转成 JSON Schema 写进 system 消息，并开 `response_format: json_object`。
+  JSON 模式只保证顶层是对象，所以初筛这种数组结果让模型放进 `{"items": [...]}`，代理再拆回数组，前端看到的形状不变。
+- `thinkingConfig` 是 Gemini 专属，直接忽略；`max_tokens` 固定 8192（Kimi 不设时默认很短，深审会被截断）；
+  输出被截断（`finish_reason: length`）报 `UPSTREAM_ERROR`，不把半截 JSON 交给前端。
+- 文件 / 图片（`inlineData`）一律 400 `UNSUPPORTED_INPUT`。
+
+**只换模型，不碰评分**：LLM 照旧只抽证据，分数由代码算；rubric / scoringVersion 不变。
+评分记录里的 `providerId` / `modelId` 改为记实际调用的服务商和模型（之前写死 `gemini`），给 Track F 学权重时区分来源。
+提示词是照 Gemini 调的，换模型后证据质量可能不同，需要用真 key 实测。
+
+**简历上传**：PDF / Word / TXT 先在浏览器里转成文字（`services/resumeTextExtractor.ts`，pdf.js + mammoth，
+按需加载，原文件不离开本机），再交给模型，所以哪家都能用。图片和扫描件读不出文字，退回到把文件交给模型：
+Gemini 照旧能读，DeepSeek / Kimi 会提示换成能复制文字的文件或粘贴内容。
+
+**公网部署**：`wrangler.jsonc` 的 `vars.LLM_PROVIDER` 默认 `gemini`，Deploy 工作流目前只上传 `GEMINI_API_KEY`。
+线上要换 DeepSeek / Kimi，需要改这个变量并 `wrangler secret put DEEPSEEK_API_KEY`（或 `KIMI_API_KEY`）；这版没改部署流程。
+
 ## 4. 怎么跑
 
-**本地开发**：`.env.local` 写 `GEMINI_API_KEY=...`，然后 `npm run dev`。前端请求同源 `/api/generate`，
+**本地开发**：`.env.local` 写 `GEMINI_API_KEY=...`（换模型见 §3.1，例如 `LLM_PROVIDER=deepseek` + `DEEPSEEK_API_KEY=...`），然后 `npm run dev`。前端请求同源 `/api/generate`，
 Vite 插件在 Node 侧转发。右上角的"Key"按钮和"未激活"遮罩在代理模式下不再显示。
 
 **沿用旧 BYOK 直连**：`.env.local` 写 `VITE_LLM_MODE=byok`，行为与改动前一致（Key 存 localStorage）。

@@ -8,9 +8,17 @@ vi.mock('./llmClient', () => ({
   getLlmMode: () => 'proxy',
 }));
 
+// 缺省读不出文字（等同图片 / 扫描件），走把文件交给模型的老路径；转文字路径单独测。
+const { mockExtractResumeText } = vi.hoisted(() => ({ mockExtractResumeText: vi.fn() }));
+vi.mock('./resumeTextExtractor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./resumeTextExtractor')>()),
+  extractResumeText: mockExtractResumeText,
+}));
+
 describe('resumeParser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockExtractResumeText.mockResolvedValue(null);
   });
 
   describe('parseResumeFile', () => {
@@ -275,6 +283,65 @@ describe('resumeParser', () => {
       if (result.status === 'ok') {
         expect(result.data.basic.name).toBe('赵六');
       }
+    });
+  });
+
+  describe('text-first upload (works with every provider)', () => {
+    const minimal = {
+      basic: { name: 'Text', email: '', phone: '', location: '' },
+      summary: '',
+      education: [],
+      experience: [],
+      skills: { hard: [], soft: [], languages: [], tools: [] },
+      projects: [],
+    };
+
+    it('sends extracted text instead of the file when the PDF has text', async () => {
+      mockExtractResumeText.mockResolvedValue('Python SQL data analyst intern');
+      mockGenerateContent.mockResolvedValue({ text: JSON.stringify(minimal) });
+
+      const file = new File(['%PDF'], 'resume.pdf', { type: 'application/pdf' });
+      const result = await parseResumeFile(file);
+
+      expect(result.status).toBe('ok');
+      const req = mockGenerateContent.mock.calls[0][0];
+      expect(typeof req.contents).toBe('string');
+      expect(req.contents).toContain('Python SQL data analyst intern');
+      expect(JSON.stringify(req)).not.toContain('inlineData');
+    });
+
+    it('falls back to sending the file when extraction throws', async () => {
+      mockExtractResumeText.mockRejectedValue(new Error('encrypted'));
+      mockGenerateContent.mockResolvedValue({ text: JSON.stringify(minimal) });
+
+      const file = new File(['%PDF'], 'resume.pdf', { type: 'application/pdf' });
+      await parseResumeFile(file);
+
+      expect(mockGenerateContent.mock.calls[0][0].contents[0].parts[0].inlineData.mimeType).toBe(
+        'application/pdf',
+      );
+    });
+
+    it('asks for pasted text when a DOCX has no readable text, without calling the model', async () => {
+      const file = new File(['x'], 'resume.docx', {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      const result = await parseResumeFile(file);
+
+      expect(result.status).toBe('error');
+      if (result.status === 'error') expect(result.message).toContain('粘贴');
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
+
+    it('explains image resumes in plain words when the proxy model only reads text', async () => {
+      mockGenerateContent.mockRejectedValue(
+        new Error('Proxy 400 UNSUPPORTED_INPUT: deepseek 不接受文件或图片输入'),
+      );
+      const file = new File(['img'], 'resume.png', { type: 'image/png' });
+      const result = await parseResumeFile(file);
+
+      expect(result.status).toBe('error');
+      if (result.status === 'error') expect(result.message).toContain('只能读文字');
     });
   });
 });

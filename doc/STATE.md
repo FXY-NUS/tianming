@@ -41,6 +41,7 @@
   `vitePlugin.ts` 本地同端口）；前端经 `services/llmClient.ts` 走 `/api/generate`，Key 已不在浏览器。
 - 接口契约 v1 与扩展对接要点见 `doc/backend-proxy.md` §2；扩展线程按它对接。
 - 下一步：补 `wrangler.toml` 并真部署一次 Worker；上线前加限流（见 `doc/backend-proxy.md` §5）。
+- 换模型（2026-10-19 · `feat/proxy-model-switch-op9v6f`）：代理按 `LLM_PROVIDER` 切 Gemini / DeepSeek / Kimi，简历先在浏览器转文字。见 `doc/backend-proxy.md` §3.1。
 
 ## M2 · 浏览器扩展（并行推进中）
 
