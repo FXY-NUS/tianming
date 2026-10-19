@@ -133,6 +133,8 @@ test('天命页面开着时，打分结果回到徽章上', async ({ context, ll
 
 test('「送进天命」把岗位加进列表，重复发送不会重复', async ({ context }) => {
   const app = await openApp(context);
+  // 主页默认一张一张看；切到完整列表才能数列表里有几条。
+  await app.getByRole('button', { name: '完整列表' }).click();
   const titles = app.locator('h3', { hasText: /^Data Analyst$/ });
   await expect(titles).toHaveCount(0);
 

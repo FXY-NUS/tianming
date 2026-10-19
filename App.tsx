@@ -33,6 +33,8 @@ import {
   Plus,
   ClipboardPaste,
   FileText,
+  List,
+  Layers,
 } from 'lucide-react';
 import { ApplyProfile, Job, SavedAnswer, UserContext, UserPreferences } from './types';
 import {
@@ -55,6 +57,14 @@ import { useExtensionImport } from './src/hooks/useExtensionImport';
 import { getLlmMode } from './services/llmClient';
 import { createCachedTriage, triageCards } from './services/extensionTriage';
 import { buildCopyKit } from './services/copyKit';
+import {
+  getJobScore,
+  getUnknownRatio,
+  hasInsufficientScoreData,
+  orderFocusQueue,
+  passFocusJob,
+  pickFocusView,
+} from './services/focusQueue';
 import {
   jobFromPastedText,
   jobsFromExtension,
@@ -143,23 +153,6 @@ const normalizeApplyProfileForSave = (applyProfile?: ApplyProfile): ApplyProfile
   return isApplyProfileEmpty(normalized) ? undefined : normalized;
 };
 
-const getJobScore = (job: Job): number | undefined =>
-  job.analysis?.matchScore?.overall ??
-  job.matchScore?.overall ??
-  job.analysis?.score ??
-  job.flashScore;
-
-const getUnknownRatio = (matchScore: Job['matchScore']): number => {
-  if (!matchScore || matchScore.dimensions.length === 0) return 0;
-  const unknownCount = matchScore.dimensions.filter(
-    (dimension) => dimension.confidence === 'unknown' || dimension.score === undefined,
-  ).length;
-  return unknownCount / matchScore.dimensions.length;
-};
-
-const hasInsufficientScoreData = (matchScore: Job['matchScore']): boolean =>
-  getUnknownRatio(matchScore) > 0.5;
-
 const scorePillClass = (score: number | undefined): string => {
   if (score === undefined) return 'bg-slate-200 text-slate-500';
   if (score >= 80) return 'bg-emerald-500 text-white';
@@ -188,6 +181,26 @@ const ApplyInput = ({
   </div>
 );
 
+type ViewMode = 'focus' | 'list';
+const VIEW_MODE_STORAGE_KEY = 'tianming.viewMode';
+
+// 只是个人习惯，读写失败（隐私模式等）就回到默认的单卡模式。
+const loadViewMode = (): ViewMode => {
+  try {
+    return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'focus';
+  } catch {
+    return 'focus';
+  }
+};
+
+const saveViewMode = (mode: ViewMode) => {
+  try {
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+  } catch {
+    // ignore
+  }
+};
+
 const logStorageError = (error: unknown) => {
   console.error('IndexedDB storage error', error);
 };
@@ -198,12 +211,17 @@ const App = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [showPasteJobModal, setShowPasteJobModal] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [pickedJob, setSelectedJob] = useState<Job | null>(null);
   const [storageReady, setStorageReady] = useState(false);
 
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState('Date');
+
+  // 单卡聚焦（默认）：一次一张，「下一张」往后翻；完整列表只作为退路。
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
+  const [focusId, setFocusId] = useState<string | undefined>();
+  const [passedIds, setPassedIds] = useState<string[]>([]);
 
   const [isScreening, setIsScreening] = useState(false);
   const [isAuditing, setIsAuditing] = useState(false);
@@ -419,6 +437,8 @@ const App = () => {
   };
 
   const handleDeepAudit = async (job: Job) => {
+    // 审计会改分数和排序，先把这张钉住，单卡模式下不会跳走。
+    setFocusId(job.id);
     setIsAuditing(true);
     try {
       const analysis = await deepAuditJob(job, userCtx);
@@ -488,6 +508,7 @@ const App = () => {
     setStatusFilter('All');
     setFilter('');
     setSelectedJob(job);
+    setFocusId(job.id);
     setShowPasteJobModal(false);
     return null;
   };
@@ -557,6 +578,27 @@ const App = () => {
         return new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime();
       });
   }, [jobs, filter, statusFilter, sortBy]);
+
+  const focusQueue = useMemo(() => orderFocusQueue(jobs, passedIds), [jobs, passedIds]);
+  const focusView = useMemo(() => pickFocusView(focusQueue, focusId), [focusQueue, focusId]);
+  const focusCurrent = focusView.current;
+
+  // 单卡模式下详情区显示队列里的当前卡；列表模式显示用户点选的那张。
+  const selectedJob = viewMode === 'focus' ? (focusCurrent ?? null) : pickedJob;
+
+  const switchViewMode = (mode: ViewMode) => {
+    if (mode === 'focus' && pickedJob) setFocusId(pickedJob.id);
+    if (mode === 'list') setSelectedJob(focusCurrent ?? null);
+    setViewMode(mode);
+    saveViewMode(mode);
+  };
+
+  const showNextCard = () => {
+    if (!focusCurrent) return;
+    const nextPassed = passFocusJob(passedIds, focusCurrent.id);
+    setPassedIds(nextPassed);
+    setFocusId(pickFocusView(orderFocusQueue(jobs, nextPassed)).current?.id);
+  };
 
   // Local edit state for profile modal
   const [editCtx, setEditCtx] = useState<UserContext>(userCtx);
@@ -769,19 +811,6 @@ const App = () => {
         </div>
 
         <div className="p-3 space-y-2 bg-white border-b shadow-sm shrink-0">
-          <div className="relative">
-            <Search
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-              size={14}
-            />
-            <input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="搜索岗位或公司..."
-              className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500"
-            />
-          </div>
-
           <div className="flex gap-2">
             <label className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-slate-100">
               <Upload size={12} /> 导入 JSON
@@ -793,102 +822,167 @@ const App = () => {
             >
               <ClipboardPaste size={12} /> 粘贴 JD
             </button>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-white border border-slate-200 rounded-lg px-2 text-[10px] font-bold outline-none"
+          </div>
+
+          <div className="flex rounded-lg bg-slate-100 p-0.5 text-[10px] font-bold">
+            <button
+              type="button"
+              onClick={() => switchViewMode('focus')}
+              className={`flex-1 flex items-center justify-center gap-1 rounded-md py-1 transition-all ${viewMode === 'focus' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}
             >
-              <option value="Date">日期</option>
-              <option value="Score">评分</option>
-            </select>
+              <Layers size={12} /> 一张一张看
+            </button>
+            <button
+              type="button"
+              onClick={() => switchViewMode('list')}
+              className={`flex-1 flex items-center justify-center gap-1 rounded-md py-1 transition-all ${viewMode === 'list' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}
+            >
+              <List size={12} /> 完整列表
+            </button>
           </div>
 
-          <div className="flex gap-1 overflow-x-auto no-scrollbar py-0.5">
-            {[
-              { id: 'All', label: '全部', c: counts.All },
-              { id: 'Fav', label: '感兴趣', c: counts.Fav, icon: <Star size={10} /> },
-              { id: 'New', label: '待筛', c: counts.New },
-              { id: 'Screened', label: '已筛', c: counts.Screened },
-              { id: 'HighMatch', label: '推荐', c: counts.HighMatch },
-            ].map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setStatusFilter(s.id)}
-                className={`px-2.5 py-1 rounded-full border text-[9px] font-black transition-all flex items-center gap-1 whitespace-nowrap ${statusFilter === s.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}
-              >
-                {s.icon}
-                {s.label} <span className="opacity-40">{s.c}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 no-scrollbar">
-          {processedJobs.map((job) => {
-            const displayScore = getJobScore(job);
-            const cardMatchScore = job.analysis?.matchScore ?? job.matchScore;
-            const cardHasInsufficientData = hasInsufficientScoreData(cardMatchScore);
-            return (
-              <div
-                key={job.id}
-                onClick={() => setSelectedJob(job)}
-                className={`p-4 cursor-pointer hover:bg-slate-50 transition-all border-l-[6px] relative group ${selectedJob?.id === job.id ? 'bg-indigo-50 border-l-indigo-600 shadow-inner' : 'border-l-transparent'}`}
-              >
-                <div className="flex justify-between items-start gap-2 mb-1">
-                  <h3
-                    className={`font-bold text-[13px] leading-tight line-clamp-2 ${selectedJob?.id === job.id ? 'text-indigo-950' : 'text-slate-800'}`}
-                  >
-                    {job.title}
-                  </h3>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Star
-                      onClick={(e) => toggleFavorite(job.id, e)}
-                      size={16}
-                      className={`transition-colors ${job.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200 group-hover:text-slate-300'}`}
-                    />
-                    {displayScore !== undefined && cardHasInsufficientData && (
-                      <span
-                        title="超过一半评分维度仍是 unknown"
-                        className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"
-                      >
-                        信息不足
-                      </span>
-                    )}
-                    {displayScore !== undefined && !cardHasInsufficientData && (
-                      <span
-                        className={`text-[10px] font-black px-1.5 py-0.5 rounded ${scorePillClass(displayScore)}`}
-                      >
-                        {displayScore}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="text-[11px] text-slate-500 font-medium mb-2">{job.company}</div>
-                {job.flashMatchReason && (
-                  <div
-                    className={`text-[10px] p-2 rounded-lg line-clamp-2 italic ${(displayScore ?? 100) < 40 ? 'bg-slate-200/50 text-slate-400' : 'bg-white/50 border border-indigo-100 text-indigo-700'}`}
-                  >
-                    "{job.flashMatchReason}"
-                  </div>
-                )}
-                <div className="flex items-center justify-between mt-3">
-                  <span className="text-[9px] text-slate-400">
-                    {new Date(job.importedAt).toLocaleDateString()}
-                  </span>
-                  <Trash2
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      persistJobs((prev) => prev.filter((j) => j.id !== job.id));
-                      if (selectedJob?.id === job.id) setSelectedJob(null);
-                    }}
-                    size={14}
-                    className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                  />
-                </div>
+          {viewMode === 'list' && (
+            <>
+              <div className="relative">
+                <Search
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={14}
+                />
+                <input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="搜索岗位或公司..."
+                  className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500"
+                />
               </div>
-            );
-          })}
+
+              <div className="flex gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-lg px-2 text-[10px] font-bold outline-none"
+                >
+                  <option value="Date">日期</option>
+                  <option value="Score">评分</option>
+                </select>
+              </div>
+
+              <div className="flex gap-1 overflow-x-auto no-scrollbar py-0.5">
+                {[
+                  { id: 'All', label: '全部', c: counts.All },
+                  { id: 'Fav', label: '感兴趣', c: counts.Fav, icon: <Star size={10} /> },
+                  { id: 'New', label: '待筛', c: counts.New },
+                  { id: 'Screened', label: '已筛', c: counts.Screened },
+                  { id: 'HighMatch', label: '推荐', c: counts.HighMatch },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setStatusFilter(s.id)}
+                    className={`px-2.5 py-1 rounded-full border text-[9px] font-black transition-all flex items-center gap-1 whitespace-nowrap ${statusFilter === s.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}
+                  >
+                    {s.icon}
+                    {s.label} <span className="opacity-40">{s.c}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
+
+        {viewMode === 'focus' && (
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
+            {focusView.upcoming.length > 0 && (
+              <>
+                <div className="px-1 text-[10px] font-black text-slate-400 tracking-widest">
+                  接下来
+                </div>
+                {focusView.upcoming.map((job) => (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => setFocusId(job.id)}
+                    title="先看这张"
+                    className="w-full text-left p-3 rounded-xl border border-slate-100 bg-slate-50 opacity-60 hover:opacity-100 hover:border-indigo-200 transition-all"
+                  >
+                    <div className="font-bold text-[12px] text-slate-700 leading-tight line-clamp-2">
+                      {job.title}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1">{job.company}</div>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {viewMode === 'list' && (
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 no-scrollbar">
+            {processedJobs.map((job) => {
+              const displayScore = getJobScore(job);
+              const cardMatchScore = job.analysis?.matchScore ?? job.matchScore;
+              const cardHasInsufficientData = hasInsufficientScoreData(cardMatchScore);
+              return (
+                <div
+                  key={job.id}
+                  onClick={() => setSelectedJob(job)}
+                  className={`p-4 cursor-pointer hover:bg-slate-50 transition-all border-l-[6px] relative group ${selectedJob?.id === job.id ? 'bg-indigo-50 border-l-indigo-600 shadow-inner' : 'border-l-transparent'}`}
+                >
+                  <div className="flex justify-between items-start gap-2 mb-1">
+                    <h3
+                      className={`font-bold text-[13px] leading-tight line-clamp-2 ${selectedJob?.id === job.id ? 'text-indigo-950' : 'text-slate-800'}`}
+                    >
+                      {job.title}
+                    </h3>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Star
+                        onClick={(e) => toggleFavorite(job.id, e)}
+                        size={16}
+                        className={`transition-colors ${job.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200 group-hover:text-slate-300'}`}
+                      />
+                      {displayScore !== undefined && cardHasInsufficientData && (
+                        <span
+                          title="超过一半评分维度仍是 unknown"
+                          className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"
+                        >
+                          信息不足
+                        </span>
+                      )}
+                      {displayScore !== undefined && !cardHasInsufficientData && (
+                        <span
+                          className={`text-[10px] font-black px-1.5 py-0.5 rounded ${scorePillClass(displayScore)}`}
+                        >
+                          {displayScore}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-medium mb-2">{job.company}</div>
+                  {job.flashMatchReason && (
+                    <div
+                      className={`text-[10px] p-2 rounded-lg line-clamp-2 italic ${(displayScore ?? 100) < 40 ? 'bg-slate-200/50 text-slate-400' : 'bg-white/50 border border-indigo-100 text-indigo-700'}`}
+                    >
+                      "{job.flashMatchReason}"
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-[9px] text-slate-400">
+                      {new Date(job.importedAt).toLocaleDateString()}
+                    </span>
+                    <Trash2
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        persistJobs((prev) => prev.filter((j) => j.id !== job.id));
+                        if (selectedJob?.id === job.id) setSelectedJob(null);
+                      }}
+                      size={14}
+                      className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Main Detail Area */}
@@ -949,6 +1043,16 @@ const App = () => {
                     )}
                   </div>
                   <div className="flex gap-2">
+                    {viewMode === 'focus' && (
+                      <button
+                        type="button"
+                        onClick={showNextCard}
+                        title="先看下一张，这张会排到后面"
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 bg-white border hover:bg-slate-50 hover:text-slate-700 flex items-center gap-1 transition-all"
+                      >
+                        下一张 <ChevronRight size={16} />
+                      </button>
+                    )}
                     <button
                       onClick={() => setIsChatOpen(!isChatOpen)}
                       className={`p-2.5 rounded-xl transition-all ${isChatOpen ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white border text-slate-600 hover:bg-slate-50'}`}
@@ -1227,9 +1331,13 @@ const App = () => {
               />
             </div>
             <h2 className="text-2xl font-black text-slate-400 tracking-tighter">
-              选定一个职位开启天命审计
+              {viewMode === 'focus' ? '还没有要看的岗位' : '选定一个职位开启天命审计'}
             </h2>
-            <p className="text-slate-400 mt-4 max-w-sm italic">"每一份 JD 都将被剥去伪装。"</p>
+            <p className="text-slate-400 mt-4 max-w-sm italic">
+              {viewMode === 'focus'
+                ? '在左边粘贴一份 JD 或导入 JSON，就从这里一张一张看。'
+                : '"每一份 JD 都将被剥去伪装。"'}
+            </p>
           </div>
         )}
       </div>
