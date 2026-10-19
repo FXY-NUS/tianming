@@ -1,5 +1,5 @@
 // Cloudflare Worker：一个 Worker 同时托管前端静态资源（dist/）和后端代理 /api/*，同源免 CORS。
-// 密钥不写在这里：GEMINI_API_KEY / PROXY_TOKEN 用 `npx wrangler secret put` 设置。
+// 密钥不写在这里：GEMINI_API_KEY / DEEPSEEK_API_KEY / KIMI_API_KEY / PROXY_TOKEN 用 `npx wrangler secret put` 设置。
 // 部署步骤见 doc/backend-proxy.md §7。
 {
   "name": "tianming",
@@ -26,5 +26,7 @@
   "vars": {
     // 跨域白名单，逗号分隔。网页与代理同源时留空；扩展上线后填 chrome-extension://<扩展 id>。
     "ALLOWED_ORIGINS": "",
+    // 用哪家模型：gemini | deepseek | kimi；换了要同时 put 对应的 Key。
+    "LLM_PROVIDER": "gemini",
   },
 }

@@ -17,7 +17,7 @@ describe('worker routing', () => {
   it('sends /api/* to the proxy handler, never to ASSETS', async () => {
     const env: WorkerEnv = { ASSETS: assets() };
     const res = await worker.fetch(new Request('https://tianming.test/api/health'), env);
-    expect(await res.json()).toEqual({ ok: true, version: 'v1' });
+    expect(await res.json()).toEqual({ ok: true, version: 'v1', provider: 'gemini' });
     expect(env.ASSETS!.fetch).not.toHaveBeenCalled();
   });
 

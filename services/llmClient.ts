@@ -20,6 +20,9 @@ export interface LlmGenerateRequest {
 
 export interface LlmGenerateResult {
   text: string | undefined;
+  /** 代理回报的实际服务商与模型；BYOK 直连时就是 gemini 和请求的模型。 */
+  provider: string;
+  model: string;
 }
 
 // 逐个字段写全 import.meta.env.VITE_*，让 Vite 只内联这几个值，不把整个 env 对象打进 bundle。
@@ -53,7 +56,11 @@ async function generateViaProxy(req: LlmGenerateRequest): Promise<LlmGenerateRes
     throw new Error(`Proxy ${response.status} ${code}: ${message}`);
   }
 
-  return { text: data.text ?? undefined };
+  return {
+    text: data.text ?? undefined,
+    provider: data.provider ?? 'gemini',
+    model: data.model ?? req.model,
+  };
 }
 
 async function generateDirect(req: LlmGenerateRequest): Promise<LlmGenerateResult> {
@@ -61,5 +68,5 @@ async function generateDirect(req: LlmGenerateRequest): Promise<LlmGenerateResul
   const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey: apiKey ?? '' });
   const response = await ai.models.generateContent(req);
-  return { text: response.text };
+  return { text: response.text, provider: 'gemini', model: req.model };
 }

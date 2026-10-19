@@ -2,10 +2,11 @@ import { Type } from '@google/genai';
 import { ResumeStructured } from '../types';
 import { RESUME_PARSE_PROMPT } from '../constants';
 import { generateContent } from './llmClient';
+import { DOCX_MIME, extractResumeText, PDF_MIME } from './resumeTextExtractor';
 
 const SUPPORTED_MIMES = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  PDF_MIME,
+  DOCX_MIME,
   'image/png',
   'image/jpeg',
   'image/webp',
@@ -130,6 +131,23 @@ export async function parseResumeFile(file: File): Promise<ParseResult> {
     };
   }
 
+  // 先在浏览器里转成文字：哪家模型都能读，也省掉把整份文件传给模型。
+  let text: string | null = null;
+  try {
+    text = await extractResumeText(file, mime);
+  } catch {
+    text = null; // 文件损坏或加密：退回到把文件交给模型
+  }
+  if (text) return parseResumeText(text);
+  if (mime === 'text/plain' || mime === DOCX_MIME) {
+    return {
+      status: 'error',
+      kind: 'empty_response',
+      message: '没能从文件里读出文字，请把简历内容粘贴到下面。',
+    };
+  }
+
+  // 图片或扫描件读不出文字：把文件交给模型（只有 Gemini 支持）。
   return new Promise((resolve) => {
     const reader = new FileReader();
 
@@ -146,11 +164,7 @@ export async function parseResumeFile(file: File): Promise<ParseResult> {
         const result = await callGeminiWithMultimodal(mime, base64);
         resolve(result);
       } catch (err) {
-        resolve({
-          status: 'error',
-          kind: 'gemini_error',
-          message: err instanceof Error ? err.message : 'Gemini API error',
-        });
+        resolve({ status: 'error', kind: 'gemini_error', message: describeLlmError(err) });
       }
     };
 
@@ -162,6 +176,15 @@ export async function parseResumeFile(file: File): Promise<ParseResult> {
   });
 }
 
+/** 代理换成只读文字的模型时，图片 / 扫描件会被拒（UNSUPPORTED_INPUT），给一句能照做的提示。 */
+function describeLlmError(err: unknown): string {
+  const message = err instanceof Error ? err.message : 'Gemini API error';
+  if (message.includes('UNSUPPORTED_INPUT')) {
+    return '当前模型只能读文字，这份简历是图片或扫描件，读不出文字。请换成能复制文字的 PDF / Word，或把简历内容粘贴到下面。';
+  }
+  return message;
+}
+
 export async function parseResumeText(text: string): Promise<ParseResult> {
   if (!text || !text.trim()) {
     return { status: 'error', kind: 'empty_response', message: 'Resume text is empty' };
@@ -171,11 +194,7 @@ export async function parseResumeText(text: string): Promise<ParseResult> {
     const result = await callGeminiWithText(text);
     return result;
   } catch (err) {
-    return {
-      status: 'error',
-      kind: 'gemini_error',
-      message: err instanceof Error ? err.message : 'Gemini API error',
-    };
+    return { status: 'error', kind: 'gemini_error', message: describeLlmError(err) };
   }
 }
 

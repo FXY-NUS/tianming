@@ -74,11 +74,15 @@ describe('geminiService scoring integration', () => {
   it('uses the scoring engine result for batch screening instead of an LLM score', async () => {
     mockGenerateContent.mockResolvedValue({
       text: JSON.stringify([{ id: job.id, score: 5, reason: 'skills align', ...evidence }]),
+      provider: 'deepseek',
+      model: 'deepseek-chat',
     });
 
     const result = await batchScreenJobs([job], ctx);
 
     expect(result).toHaveLength(1);
+    expect(result[0].matchScore.providerId).toBe('deepseek');
+    expect(result[0].matchScore.modelId).toBe('deepseek-chat');
     expect(result[0].reason).toBe('skills align');
     expect(result[0].score).toBe(result[0].matchScore.overall);
     expect(result[0].score).not.toBe(5);

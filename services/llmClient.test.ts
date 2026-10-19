@@ -28,7 +28,7 @@ describe('llmClient (proxy mode)', () => {
       config: { systemInstruction: 'sys' },
     });
 
-    expect(result.text).toBe('hi');
+    expect(result).toEqual({ text: 'hi', provider: 'gemini', model: 'gemini-3-flash-preview' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/generate');
     expect(init.method).toBe('POST');
@@ -52,6 +52,16 @@ describe('llmClient (proxy mode)', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://proxy.example/api/generate');
     expect(init.headers.Authorization).toBe('Bearer tok');
+  });
+
+  it('passes through the provider and model the proxy actually used', async () => {
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ text: 'ok', model: 'deepseek-chat', provider: 'deepseek' })),
+    );
+
+    const result = await generateContent({ model: 'gemini-3-flash-preview', contents: 'x' });
+    expect(result).toEqual({ text: 'ok', provider: 'deepseek', model: 'deepseek-chat' });
   });
 
   it('surfaces proxy error code and message', async () => {
